@@ -12,6 +12,7 @@ import UIKit
 
 enum OPDSError: Error {
     case invalidURL(String)
+    case delegateNotAvailable
 }
 
 /// The OPDS module handles the presentation of OPDS catalogs.
@@ -58,7 +59,17 @@ final class OPDSModule: OPDSModuleAPI {
                     OPDSFeedView(feedURL: url, delegate: self.delegate)
                 }
                 .navigationDestination(for: OPDSFeedView.NavigablePublication.self) { navPublication in
-                    OPDSPublicationInfoView(publication: navPublication.publication)
+                    OPDSPublicationInfoView(publication: navPublication.publication) { link, progress in
+                        guard let delegate = self.delegate else {
+                            throw OPDSError.delegateNotAvailable
+                        }
+                        return try await delegate.opdsDownloadPublication(
+                            navPublication.publication,
+                            at: link,
+                            sender: self.rootViewController,
+                            progress: progress
+                        )
+                    }
                 }
         }
 

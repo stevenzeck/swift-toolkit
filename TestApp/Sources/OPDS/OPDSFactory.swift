@@ -14,14 +14,4 @@ final class OPDSFactory {
     static let shared = OPDSFactory()
 
     weak var delegate: OPDSModuleDelegate?
-    private let storyboard = UIStoryboard(name: "OPDS", bundle: nil)
-}
-
-extension OPDSFactory: OPDSPublicationInfoViewControllerFactory {
-    func make(publication: Publication) -> OPDSPublicationInfoViewController {
-        let controller = storyboard.instantiateViewController(withIdentifier: "OPDSPublicationInfoViewController") as! OPDSPublicationInfoViewController
-        controller.publication = publication
-        controller.moduleDelegate = delegate
-        return controller
-    }
 }
