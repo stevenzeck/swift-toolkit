@@ -79,7 +79,6 @@ struct IdentifiableError: Identifiable {
 }
 
 extension LibraryViewModel {
-    
     @MainActor
     func openPublication(book: Book) async throws -> Publication? {
         guard let rootViewController = UIApplication.shared.connectedScenes
