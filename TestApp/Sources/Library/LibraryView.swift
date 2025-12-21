@@ -15,6 +15,8 @@ struct LibraryView: View {
     @State private var showingFileImporter = false
     @State private var downloadURLString = ""
 
+    @State private var selectedBookSheet: BookSheet?
+
     let columns = [
         GridItem(.adaptive(minimum: 140), spacing: 20, alignment: .top),
     ]
@@ -38,6 +40,11 @@ struct LibraryView: View {
                             viewModel.delete(book: book)
                         } label: {
                             Label("Remove", systemImage: "trash")
+                        }
+                        Button {
+                            selectedBookSheet = BookSheet(book: book)
+                        } label: {
+                            Label("Info", systemImage: "info.circle")
                         }
                     }
                 }
@@ -92,5 +99,14 @@ struct LibraryView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .sheet(item: $selectedBookSheet) { sheet in
+            PublicationDetailLoader(book: sheet.book, viewModel: viewModel)
+        }
     }
+}
+
+// Since book is not identifiable, we use url as the id for showing the sheet
+struct BookSheet: Identifiable {
+    let book: Book
+    var id: String { book.url }
 }

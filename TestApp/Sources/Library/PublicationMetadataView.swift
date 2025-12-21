@@ -11,51 +11,48 @@ struct PublicationMetadataView: View {
     var publication: Publication
 
     var body: some View {
-        NavigationView {
-            List {
-                Section("Publication") {
-                    let title = publication.metadata.title ?? "No title"
-                    FieldRow(title: "Title", content: title)
+        List {
+            Section("Publication") {
+                let title = publication.metadata.title ?? "No title"
+                FieldRow(title: "Title", content: title)
 
-                    if let id = publication.metadata.identifier {
-                        FieldRow(title: "Identifier", content: id)
-                    }
-
-                    let authors = publication.metadata.authors
-                    if !authors.isEmpty {
-                        FieldRow(
-                            singleTitle: "Author",
-                            pluralTitle: "Authors",
-                            content: authors.map(\.name)
-                        )
-                    }
-
-                    let publishers = publication.metadata.publishers
-                    if !publishers.isEmpty {
-                        FieldRow(
-                            singleTitle: "Publisher",
-                            pluralTitle: "Publishers",
-                            content: publishers.map(\.name)
-                        )
-                    }
-
-                    if let published = publication.metadata.published {
-                        FieldRow(
-                            title: "Publication date",
-                            content: published.formatted(date: .long, time: .omitted)
-                        )
-                    }
+                if let id = publication.metadata.identifier {
+                    FieldRow(title: "Identifier", content: id)
                 }
 
-                AccessibilityMetadataView(
-                    guide: AccessibilityMetadataDisplayGuide(
-                        publication: publication
+                let authors = publication.metadata.authors
+                if !authors.isEmpty {
+                    FieldRow(
+                        singleTitle: "Author",
+                        pluralTitle: "Authors",
+                        content: authors.map(\.name)
                     )
-                )
+                }
+
+                let publishers = publication.metadata.publishers
+                if !publishers.isEmpty {
+                    FieldRow(
+                        singleTitle: "Publisher",
+                        pluralTitle: "Publishers",
+                        content: publishers.map(\.name)
+                    )
+                }
+
+                if let published = publication.metadata.published {
+                    FieldRow(
+                        title: "Publication date",
+                        content: published.formatted(date: .long, time: .omitted)
+                    )
+                }
             }
-            .navigationTitle("Metadata")
+
+            AccessibilityMetadataView(
+                guide: AccessibilityMetadataDisplayGuide(
+                    publication: publication
+                )
+            )
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .navigationTitle("Metadata")
     }
 }
 

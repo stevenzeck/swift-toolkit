@@ -77,3 +77,18 @@ struct IdentifiableError: Identifiable {
     let id = UUID()
     let error: UserError
 }
+
+extension LibraryViewModel {
+    
+    @MainActor
+    func openPublication(book: Book) async throws -> Publication? {
+        guard let rootViewController = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController })
+            .first
+        else {
+            print("Error: Could not find a root view controller to act as sender.")
+            return nil
+        }
+        return try await libraryService.openBook(book, sender: rootViewController)
+    }
+}
