@@ -8,12 +8,11 @@ import Combine
 import Foundation
 import ReadiumShared
 import ReadiumStreamer
+import SwiftUI
 import UIKit
 
-/// The Library module handles the presentation of the bookshelf, and the publications' management.
 protocol LibraryModuleAPI {
-    var delegate: LibraryModuleDelegate? { get }
-
+    var delegate: LibraryModuleDelegate? { get set }
     /// Root navigation controller containing the Library.
     /// Can be used to present the library to the user.
     var rootViewController: UINavigationController { get }
@@ -37,33 +36,36 @@ protocol LibraryModuleDelegate: ModuleDelegate {
 final class LibraryModule: LibraryModuleAPI {
     weak var delegate: LibraryModuleDelegate?
 
-    private let lcp: LCPModuleAPI
     private let library: LibraryService
-    private let factory: LibraryFactory
-    private var subscriptions = Set<AnyCancellable>()
+    private let hostingController: UIHostingController<LibraryView>
 
     init(
         delegate: LibraryModuleDelegate?,
         books: BookRepository,
         readium: Readium
     ) {
-        lcp = LCPModule(readium: readium)
-        library = LibraryService(books: books, readium: readium, lcp: lcp)
-        factory = LibraryFactory(libraryService: library)
         self.delegate = delegate
+
+        let lcp = LCPModule(readium: readium)
+        library = LibraryService(books: books, readium: readium, lcp: lcp)
+
+        let viewModel = LibraryViewModel(libraryService: library)
+        let view = LibraryView(viewModel: viewModel)
+        hostingController = UIHostingController(rootView: view)
+
+        rootViewController.tabBarItem = UITabBarItem(
+            title: NSLocalizedString("Library", comment: "Library tab title"),
+            image: UIImage(systemName: "books.vertical"),
+            selectedImage: UIImage(systemName: "books.vertical.fill")
+        )
+        rootViewController.navigationBar.prefersLargeTitles = true
+
+        viewModel.onSelectBook = { [weak self] book in
+            self?.open(book: book)
+        }
     }
 
-    private(set) lazy var rootViewController: UINavigationController = {
-        let nav = UINavigationController(rootViewController: libraryViewController)
-        nav.navigationBar.backgroundColor = .systemBackground
-        return nav
-    }()
-
-    private lazy var libraryViewController: LibraryViewController = {
-        let library: LibraryViewController = factory.make()
-        library.libraryDelegate = delegate
-        return library
-    }()
+    private(set) lazy var rootViewController: UINavigationController = .init(rootViewController: hostingController)
 
     func importPublication(
         from url: AbsoluteURL,
@@ -71,5 +73,20 @@ final class LibraryModule: LibraryModuleAPI {
         progress: @escaping (Double) -> Void
     ) async throws -> Book {
         try await library.importPublication(from: url, sender: sender, progress: progress)
+    }
+
+    private func open(book: Book) {
+        Task {
+            do {
+                if let pub = try await library.openBook(book, sender: hostingController) {
+                    delegate?.libraryDidSelectPublication(pub, book: book)
+                }
+            } catch {
+                print("Error opening book: \(error)")
+                if let error = error as? UserErrorConvertible {
+                    delegate?.presentError(error, from: rootViewController)
+                }
+            }
+        }
     }
 }
