@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -50,7 +50,7 @@ public struct MediaPlaybackInfo {
     }
 }
 
-public protocol AudioNavigatorDelegate: NavigatorDelegate {
+@MainActor public protocol AudioNavigatorDelegate: NavigatorDelegate {
     /// Called when the playback updates.
     func navigator(_ navigator: AudioNavigator, playbackDidChange info: MediaPlaybackInfo)
 
@@ -108,7 +108,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
         }
     }
 
-    public let publication: Publication
+    public nonisolated let publication: Publication
     private let initialLocation: Locator?
     private let config: Configuration
 
@@ -136,6 +136,10 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     }
 
     deinit {
+        if let timeObserver = timeObserver {
+            player.removeTimeObserver(timeObserver)
+        }
+
         playTask?.cancel()
         AudioSession.shared.end(for: self)
     }
@@ -190,7 +194,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
 
     /// Resumes or start the playback.
     public func play() {
-        playTask = Task {
+        playTask = Task { @MainActor in
             AudioSession.shared.start(with: self, isPlaying: false)
 
             if player.currentItem == nil {
@@ -200,7 +204,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
                     await go(to: link)
                 }
             }
-            await player.playImmediately(atRate: Float(settings.speed))
+            player.playImmediately(atRate: Float(settings.speed))
         }
     }
 
@@ -221,7 +225,14 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
 
     /// Seeks to the given time in the current resource.
     public func seek(to time: Double) async {
+        let wasPlaying = (state == .playing)
+        pause()
+
         await player.seek(to: CMTime(seconds: time, preferredTimescale: 1000))
+
+        if wasPlaying {
+            play()
+        }
     }
 
     /// Seeks relatively from the current time in the current resource.
@@ -232,6 +243,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     private var rateObserver: NSKeyValueObservation?
     private var timeControlStatusObserver: NSKeyValueObservation?
     private var currentItemObserver: NSKeyValueObservation?
+    private var timeObserver: Any?
 
     private lazy var mediaLoader = PublicationMediaLoader(publication: publication)
 
@@ -241,7 +253,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
         player.automaticallyWaitsToMinimizeStalling = false
         player.volume = Float(settings.volume)
 
-        player.addPeriodicTimeObserver(
+        timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(
                 seconds: config.playbackRefreshInterval,
                 preferredTimescale: 1000
@@ -314,7 +326,9 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
         if let time = time {
             let locator = makeLocator(forTime: time)
             currentLocation = locator
-            delegate?.navigator(self, locationDidChange: locator)
+            Task { @MainActor in
+                delegate?.navigator(self, locationDidChange: locator)
+            }
         }
 
         makePlaybackInfo(forTime: time) { info in
@@ -324,7 +338,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
 
     /// A deadlock can occur when loading HTTP assets and creating the playback info from the main thread.
     /// To fix this, this is an asynchronous operation.
-    private func makePlaybackInfo(forTime time: Double? = nil, completion: @escaping (MediaPlaybackInfo) -> Void) {
+    private func makePlaybackInfo(forTime time: Double? = nil, completion: @escaping @MainActor (MediaPlaybackInfo) -> Void) {
         DispatchQueue.global(qos: .userInteractive).async {
             let info = MediaPlaybackInfo(
                 resourceIndex: self.resourceIndex,
@@ -387,7 +401,9 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
         }
 
         self.lastLoadedTimeRanges = ranges
-        self.delegate?.navigator(self, loadedTimeRangesDidChange: ranges)
+        Task { @MainActor in
+            self.delegate?.navigator(self, loadedTimeRangesDidChange: ranges)
+        }
     }
 
     // MARK: - Navigator
@@ -395,6 +411,9 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     public private(set) var currentLocation: Locator?
 
     public func go(to locator: Locator, options: NavigatorGoOptions) async -> Bool {
+        let wasPlaying = (state == .playing)
+        pause()
+
         guard let newResourceIndex = publication.readingOrder.firstIndexWithHREF(locator.href) else {
             return false
         }
@@ -409,19 +428,19 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
                 player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
                 resourceIndex = newResourceIndex
                 loadedTimeRangesTimer.fire()
-                delegate?.navigator(self, loadedTimeRangesDidChange: [])
+                await delegate?.navigator(self, loadedTimeRangesDidChange: [])
             }
 
             // Seeks to time
             let time = locator.locations.time?.begin ?? ((resourceDuration ?? 0) * (locator.locations.progression ?? 0))
 
-            await withCheckedContinuation { continuation in
-                player.seek(to: CMTime(seconds: time, preferredTimescale: 1000)) { [weak self] finished in
-                    if let self = self, finished {
-                        self.delegate?.navigator(self, didJumpTo: locator)
-                    }
-                    continuation.resume()
-                }
+            let finished = await player.seek(to: CMTime(seconds: time, preferredTimescale: 1000))
+            if finished {
+                await delegate?.navigator(self, didJumpTo: locator)
+            }
+
+            if wasPlaying {
+                play()
             }
 
             return true
@@ -514,15 +533,3 @@ private extension CMTime {
         isNumeric ? seconds : 0
     }
 }
-
-@available(*, unavailable, renamed: "AudioNavigator")
-public typealias _AudioNavigator = AudioNavigator
-
-@available(*, unavailable, renamed: "AudioNavigatorDelegate")
-public typealias _AudioNavigatorDelegate = AudioNavigatorDelegate
-
-@available(*, unavailable, renamed: "AudioNavigator")
-public typealias _MediaNavigator = AudioNavigator
-
-@available(*, unavailable, renamed: "AudioNavigatorDelegate")
-public typealias _MediaNavigatorDelegate = AudioNavigatorDelegate

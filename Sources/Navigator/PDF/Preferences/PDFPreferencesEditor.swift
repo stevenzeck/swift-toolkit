@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -30,6 +30,18 @@ public final class PDFPreferencesEditor: StatefulPreferencesEditor<PDFPreference
             preference: \.backgroundColor,
             setting: \.backgroundColor,
             isEffective: { $0.preferences.backgroundColor != nil }
+        )
+
+    /// Method for fitting the pages within the viewport.
+    ///
+    /// Only effective when `scroll` is on.
+    public lazy var fit: AnyEnumPreference<Fit> =
+        enumPreference(
+            preference: \.fit,
+            setting: \.fit,
+            defaultEffectiveValue: defaults.fit ?? .auto,
+            isEffective: { $0.settings.scroll },
+            supportedValues: [.auto, .page, .width]
         )
 
     /// Indicates if the first page should be displayed in its own spread.

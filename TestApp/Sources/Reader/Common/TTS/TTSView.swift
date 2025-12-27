@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -125,7 +125,7 @@ private extension Optional where Wrapped == TTSVoice {
         guard case let .some(voice) = self else {
             return "Default"
         }
-        var desc = voice.name ?? "Voice"
+        var desc = voice.name
         if let region = voice.language.localizedRegion() {
             desc += " (\(region))"
         }

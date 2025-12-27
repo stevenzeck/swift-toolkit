@@ -9,14 +9,13 @@ targets:
   ReadiumShared:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Shared
-        excludes:
-          - Toolkit/ZIP/ZIPFoundation.swift
     dependencies:
-      - framework: ../../Carthage/Build/Fuzi.xcframework
       - framework: ../../Carthage/Build/Minizip.xcframework
+      - framework: ../../Carthage/Build/ReadiumFuzi.xcframework
+      - framework: ../../Carthage/Build/ReadiumZIPFoundation.xcframework
       - framework: ../../Carthage/Build/SwiftSoup.xcframework
       - target: ReadiumInternal
       - sdk: CoreServices.framework
@@ -27,7 +26,7 @@ targets:
   ReadiumStreamer:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Streamer
         excludes:
@@ -36,8 +35,7 @@ targets:
         type: folder
     dependencies:
       - framework: ../../Carthage/Build/CryptoSwift.xcframework
-      - framework: ../../Carthage/Build/Fuzi.xcframework
-      - framework: ../../Carthage/Build/Minizip.xcframework
+      - framework: ../../Carthage/Build/ReadiumFuzi.xcframework
       - target: ReadiumShared
       - target: ReadiumInternal
     settings:
@@ -47,7 +45,7 @@ targets:
   ReadiumNavigator:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Navigator
         excludes:
@@ -57,8 +55,7 @@ targets:
         type: folder
     dependencies:
       - framework: ../../Carthage/Build/DifferenceKit.xcframework
-      - framework: ../../Carthage/Build/Fuzi.xcframework
-      - framework: ../../Carthage/Build/Minizip.xcframework
+      - framework: ../../Carthage/Build/ReadiumFuzi.xcframework
       - framework: ../../Carthage/Build/SwiftSoup.xcframework
       - target: ReadiumShared
       - target: ReadiumInternal
@@ -69,12 +66,11 @@ targets:
   ReadiumOPDS:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/OPDS
     dependencies:
-      - framework: ../../Carthage/Build/Fuzi.xcframework
-      - framework: ../../Carthage/Build/Minizip.xcframework
+      - framework: ../../Carthage/Build/ReadiumFuzi.xcframework
       - target: ReadiumShared
       - target: ReadiumInternal
     settings:
@@ -84,14 +80,13 @@ targets:
   ReadiumLCP:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/LCP
     dependencies:
       - framework: ../../Carthage/Build/CryptoSwift.xcframework
-      - framework: ../../Carthage/Build/Fuzi.xcframework
-      - framework: ../../Carthage/Build/Minizip.xcframework
-      - framework: ../../Carthage/Build/ZIPFoundation.xcframework
+      - framework: ../../Carthage/Build/ReadiumFuzi.xcframework
+      - framework: ../../Carthage/Build/ReadiumZIPFoundation.xcframework
       - target: ReadiumShared
       - target: ReadiumInternal
     settings:
@@ -101,7 +96,7 @@ targets:
   ReadiumAdapterGCDWebServer:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Adapters/GCDWebServer
     dependencies:
@@ -115,7 +110,7 @@ targets:
   ReadiumAdapterLCPSQLite:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Adapters/LCPSQLite
     dependencies:
@@ -129,7 +124,7 @@ targets:
   ReadiumInternal:
     type: framework
     platform: iOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "13.4"
     sources: 
       - path: ../../Sources/Internal
     settings:

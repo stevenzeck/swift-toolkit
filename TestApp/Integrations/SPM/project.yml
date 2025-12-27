@@ -21,8 +21,8 @@ targets:
   TestApp:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
-    sources:
+    deploymentTarget: "18.0"
+    sources: 
       - path: Sources
         excludes:
           - Resources/Fonts

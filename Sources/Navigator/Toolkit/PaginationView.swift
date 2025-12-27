@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -93,9 +93,20 @@ final class PaginationView: UIView, Loggable {
 
     private let scrollView = UIScrollView()
 
-    init(frame: CGRect, preloadPreviousPositionCount: Int, preloadNextPositionCount: Int) {
+    /// Allows the scroll view to scroll.
+    var isScrollEnabled: Bool {
+        didSet { scrollView.isScrollEnabled = isScrollEnabled }
+    }
+
+    init(
+        frame: CGRect,
+        preloadPreviousPositionCount: Int,
+        preloadNextPositionCount: Int,
+        isScrollEnabled: Bool
+    ) {
         self.preloadPreviousPositionCount = preloadPreviousPositionCount
         self.preloadNextPositionCount = preloadNextPositionCount
+        self.isScrollEnabled = isScrollEnabled
 
         super.init(frame: frame)
 
@@ -105,6 +116,7 @@ final class PaginationView: UIView, Loggable {
         scrollView.isPagingEnabled = true
         scrollView.bounces = false
         scrollView.showsHorizontalScrollIndicator = false
+        scrollView.isScrollEnabled = isScrollEnabled
         addSubview(scrollView)
 
         // Adds an empty view before the scroll view to have a consistent behavior on all iOS
@@ -138,6 +150,28 @@ final class PaginationView: UIView, Loggable {
         scrollView.contentOffset.x = xOffsetForIndex(currentIndex)
     }
 
+    override func willMove(toSuperview newSuperview: UIView?) {
+        super.willMove(toSuperview: newSuperview)
+
+        if newSuperview == nil {
+            // Remove all spread views to break retain cycles
+            for (_, view) in loadedViews {
+                view.removeFromSuperview()
+            }
+            loadedViews.removeAll()
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+
+        if window == nil {
+            loadPagesTask.cancel()
+        } else {
+            loadPages()
+        }
+    }
+
     /// Returns the x offset to the page view with given index in the scroll view.
     private func xOffsetForIndex(_ index: Int) -> CGFloat {
         (readingProgression == .rtl)
@@ -152,7 +186,7 @@ final class PaginationView: UIView, Loggable {
     ///   - location: Location to be displayed in the page.
     ///   - pageCount: Total number of pages in the pagination view.
     ///   - readingProgression: Direction of reading progression.
-    func reloadAtIndex(_ index: Int, location: PageLocation, pageCount: Int, readingProgression: ReadingProgression) async {
+    func reloadAtIndex(_ index: Int, location: PageLocation, pageCount: Int, readingProgression: ReadingProgression) {
         precondition(pageCount >= 1)
         precondition(0 ..< pageCount ~= index)
 
@@ -165,11 +199,11 @@ final class PaginationView: UIView, Loggable {
         loadedViews.removeAll()
         loadingIndexQueue.removeAll()
 
-        await setCurrentIndex(index, location: location)
+        setCurrentIndex(index, location: location)
     }
 
     /// Updates the current and pre-loaded views.
-    private func setCurrentIndex(_ index: Int, location: PageLocation? = nil) async {
+    private func setCurrentIndex(_ index: Int, location: PageLocation? = nil) {
         guard isEmpty || index != currentIndex else {
             return
         }
@@ -197,9 +231,17 @@ final class PaginationView: UIView, Loggable {
             }
         }
 
-        await loadNextPage()
-        delegate?.paginationViewDidUpdateViews(self)
+        loadPages()
     }
+
+    private func loadPages() {
+        loadPagesTask.replace { @MainActor in
+            await loadNextPage()
+            delegate?.paginationViewDidUpdateViews(self)
+        }
+    }
+
+    private var loadPagesTask: Task<Void, Never>?
 
     private func loadNextPage() async {
         guard let (index, location) = loadingIndexQueue.popFirst() else {
@@ -316,8 +358,8 @@ final class PaginationView: UIView, Loggable {
             return
         }
 
-        scrollView.isScrollEnabled = true
-        await setCurrentIndex(index, location: location)
+        scrollView.isScrollEnabled = isScrollEnabled
+        setCurrentIndex(index, location: location)
 
         scrollView.scrollRectToVisible(CGRect(
             origin: CGPoint(
@@ -341,26 +383,23 @@ extension PaginationView: UIScrollViewDelegate {
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-        scrollView.isScrollEnabled = true
+        scrollView.isScrollEnabled = isScrollEnabled
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if !decelerate {
-            scrollView.isScrollEnabled = true
+            scrollView.isScrollEnabled = isScrollEnabled
         }
     }
 
     public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        scrollView.isScrollEnabled = true
+        scrollView.isScrollEnabled = isScrollEnabled
 
         let currentOffset = (readingProgression == .rtl)
             ? scrollView.contentSize.width - (scrollView.contentOffset.x + scrollView.frame.width)
             : scrollView.contentOffset.x
 
         let newIndex = Int(round(currentOffset / scrollView.frame.width))
-
-        Task {
-            await setCurrentIndex(newIndex)
-        }
+        setCurrentIndex(newIndex)
     }
 }

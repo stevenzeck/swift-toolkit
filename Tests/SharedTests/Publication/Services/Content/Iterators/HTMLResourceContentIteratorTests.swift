@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -227,6 +227,21 @@ class HTMLResourceContentIteratorTest: XCTestCase {
 
         result = try await iter.previous()?.equatable()
         XCTAssertEqual(elements[0], result)
+    }
+
+    func testStartingFromProgression() async throws {
+        func next(from progression: Double) async throws -> AnyEquatableContentElement? {
+            try await iterator(html, start: locator(progression: progression)).next()?.equatable()
+        }
+
+        var result = try await next(from: 0.5)
+        XCTAssertEqual(result, elements[2])
+
+        result = try await next(from: 0.21)
+        XCTAssertEqual(result, elements[1])
+
+        result = try await next(from: 0.81)
+        XCTAssertEqual(result, elements[4])
     }
 
     func testStartingFromCSSSelector() async throws {

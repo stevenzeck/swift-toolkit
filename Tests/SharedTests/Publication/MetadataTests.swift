@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -42,6 +42,7 @@ class MetadataTests: XCTestCase {
         ],
         belongsToCollections: [Contributor(name: "Collection")],
         belongsToSeries: [Contributor(name: "Series")],
+        tdm: TDM(reservation: .all, policy: HTTPURL(string: "https://tdm.com")!),
         otherMetadata: [
             "other-metadata1": "value",
             "other-metadata2": [42],
@@ -104,6 +105,10 @@ class MetadataTests: XCTestCase {
                     "collection": "Collection",
                     "series": "Series",
                     "schema:Periodical": "Periodical",
+                ],
+                "tdm": [
+                    "reservation": "all",
+                    "policy": "https://tdm.com",
                 ],
                 "other-metadata1": "value",
                 "other-metadata2": [42],
@@ -214,6 +219,10 @@ class MetadataTests: XCTestCase {
                     "collection": [["name": "Collection"]],
                     "series": [["name": "Series"]],
                     "schema:Periodical": [["name": "Periodical"]],
+                ],
+                "tdm": [
+                    "reservation": "all",
+                    "policy": "https://tdm.com",
                 ],
                 "other-metadata1": "value",
                 "other-metadata2": [42],

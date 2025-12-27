@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -20,7 +20,7 @@ public actor EPUBPositionsService: PositionsService {
         { context in
             EPUBPositionsService(
                 readingOrder: context.manifest.readingOrder,
-                presentation: context.manifest.metadata.presentation,
+                layout: context.manifest.metadata.layout,
                 container: context.container,
                 reflowableStrategy: reflowableStrategy
             )
@@ -59,18 +59,18 @@ public actor EPUBPositionsService: PositionsService {
     }
 
     private let readingOrder: [Link]
-    private let presentation: Presentation
+    private let layout: Layout?
     private let container: Container
     private let reflowableStrategy: ReflowableStrategy
 
     init(
         readingOrder: [Link],
-        presentation: Presentation,
+        layout: Layout?,
         container: Container,
         reflowableStrategy: ReflowableStrategy
     ) {
         self.readingOrder = readingOrder
-        self.presentation = presentation
+        self.layout = layout
         self.container = container
         self.reflowableStrategy = reflowableStrategy
     }
@@ -86,11 +86,12 @@ public actor EPUBPositionsService: PositionsService {
 
     private func computePositionsByReadingOrder() async -> [[Locator]] {
         var lastPositionOfPreviousResource = 0
-        var positions = await readingOrder.asyncmap { link -> [Locator] in
+        var positions = await readingOrder.asyncMap { link -> [Locator] in
             let (lastPosition, positions): (Int, [Locator]) = await {
-                if presentation.layout(of: link) == .fixed {
+                switch layout {
+                case .fixed:
                     return makePositions(ofFixedResource: link, from: lastPositionOfPreviousResource)
-                } else {
+                case nil, .reflowable, .scrolled:
                     return await makePositions(ofReflowableResource: link, from: lastPositionOfPreviousResource)
                 }
             }()
@@ -99,7 +100,7 @@ public actor EPUBPositionsService: PositionsService {
         }
 
         // Calculates totalProgression
-        let totalPageCount = await positions.asyncmap(\.count).reduce(0, +)
+        let totalPageCount = await positions.asyncMap(\.count).reduce(0, +)
         if totalPageCount > 0 {
             positions = positions.map { locators in
                 locators.map { locator in
@@ -131,7 +132,6 @@ public actor EPUBPositionsService: PositionsService {
         guard let resource = container[link.url()] else {
             return (startPosition, [])
         }
-        defer { resource.close() }
         let positionCount = await reflowableStrategy.positionCount(for: link, resource: resource)
 
         let positions = (1 ... positionCount).map { position in

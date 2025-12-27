@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -218,6 +218,7 @@ class AudiobookViewController: ReaderViewController<AudioNavigator>, AudioNaviga
     }
 }
 
+@MainActor
 class AudiobookViewModel: ObservableObject {
     let navigator: AudioNavigator
 
@@ -347,7 +348,7 @@ struct TimeSlider: View {
                 }
             }
         )
-        .onChange(of: time) { _ in
+        .onChange(of: time) {
             if !isEditing {
                 progress = time / duration
             }

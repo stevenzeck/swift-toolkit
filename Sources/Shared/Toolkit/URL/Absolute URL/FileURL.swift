@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -79,6 +79,6 @@ public struct FileURL: AbsoluteURL, Hashable, Sendable {
 public extension URLConvertible {
     /// Returns a `FileURL` if the URL has a `file` scheme.
     var fileURL: FileURL? {
-        (absoluteURL as? FileURL) ?? FileURL(url: anyURL.url)
+        (anyURL.absoluteURL as? FileURL) ?? FileURL(url: anyURL.url)
     }
 }

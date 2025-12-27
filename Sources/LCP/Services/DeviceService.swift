@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -12,27 +12,30 @@ final class DeviceService {
     private let httpClient: HTTPClient
 
     /// Returns the device's name.
-    var name: String
+    let name: String
+    /// Returns the device's ID
+    let id: String
 
     init(
         deviceName: String,
+        deviceId: String?,
         repository: LCPLicenseRepository,
         httpClient: HTTPClient
     ) {
         name = deviceName
+
+        if let providedId = deviceId {
+            id = providedId
+        } else if let savedId = UserDefaults.standard.string(forKey: "lcp_device_id") {
+            id = savedId
+        } else {
+            let generatedId = UUID().uuidString
+            UserDefaults.standard.set(generatedId, forKey: "lcp_device_id")
+            id = generatedId
+        }
+
         self.repository = repository
         self.httpClient = httpClient
-    }
-
-    /// Returns the device ID, creates it if needed.
-    var id: String {
-        let defaults = UserDefaults.standard
-        guard let deviceId = defaults.string(forKey: "lcp_device_id") else {
-            let deviceId = UUID().description
-            defaults.set(deviceId.description, forKey: "lcp_device_id")
-            return deviceId.description
-        }
-        return deviceId
     }
 
     // Device ID and name as query parameters for HTTP requests.
@@ -56,12 +59,7 @@ final class DeviceService {
         }
 
         let data = await httpClient.fetch(HTTPRequest(url: url, method: .post))
-            .map { response -> Data? in
-                guard 100 ..< 400 ~= response.statusCode else {
-                    return nil
-                }
-                return response.body
-            }
+            .map(\.body)
 
         try await repository.registerDevice(for: license.id)
 

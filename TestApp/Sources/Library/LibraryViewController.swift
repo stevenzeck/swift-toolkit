@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -11,6 +11,7 @@ import ReadiumNavigator
 import ReadiumOPDS
 import ReadiumShared
 import ReadiumStreamer
+import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import WebKit
@@ -20,9 +21,6 @@ protocol LibraryViewControllerFactory {
 }
 
 class LibraryViewController: UIViewController, Loggable {
-    typealias Factory = DetailsTableViewControllerFactory
-
-    var factory: Factory!
     private var books: [Book] = []
 
     weak var lastFlippedCell: PublicationCollectionViewCell?
@@ -34,11 +32,23 @@ class LibraryViewController: UIViewController, Loggable {
     private var subscriptions = Set<AnyCancellable>()
 
     lazy var loadingIndicator = PublicationIndicator()
-    private lazy var addBookButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addBookFromDevice))
+
+    private lazy var addBookButton = UIBarButtonItem(
+        systemItem: .add,
+        menu: UIMenu(
+            children: [
+                UIAction(title: "Import local publication") { [weak self] _ in
+                    self?.addBookFromDevice()
+                },
+                UIAction(title: "Stream publication over HTTP") { [weak self] _ in
+                    self?.addBookForStreaming()
+                },
+            ]
+        )
+    )
 
     @IBOutlet var collectionView: UICollectionView! {
         didSet {
-            collectionView.backgroundColor = #colorLiteral(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
             collectionView.contentInset = UIEdgeInsets(top: 15, left: 20,
                                                        bottom: 20, right: 20)
             collectionView.register(UINib(nibName: "PublicationCollectionViewCell", bundle: nil),
@@ -127,13 +137,48 @@ class LibraryViewController: UIViewController, Loggable {
 
     @objc func addBookFromDevice() {
         var types = DocumentTypes.main.supportedUTTypes
-        if let type = UTType(String(kUTTypeText)) {
-            types.append(type)
-        }
+        types.append(UTType.text)
 
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: types)
         documentPicker.delegate = self
         present(documentPicker, animated: true, completion: nil)
+    }
+
+    @objc func addBookForStreaming() {
+        let ac = UIAlertController(title: "Stream publication", message: nil, preferredStyle: .alert)
+        ac.addTextField { tf in
+            tf.placeholder = "HTTP URL"
+        }
+
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+
+        let addAction = UIAlertAction(title: "Add", style: .default) { [unowned ac, weak self] _ in
+            guard
+                let urlText = ac.textFields?.getOrNil(0)?.text,
+                let url = HTTPURL(string: urlText)
+            else {
+                self?.addBookForStreaming()
+                return
+            }
+
+            self?.importPublication(from: url)
+        }
+
+        ac.addAction(cancelAction)
+        ac.addAction(addAction)
+        ac.preferredAction = addAction
+
+        present(ac, animated: true)
+    }
+
+    private func importPublication(from url: HTTPURL) {
+        Task {
+            do {
+                try await library.importPublication(from: url, sender: self, progress: { _ in })
+            } catch {
+                alert(UserError(error))
+            }
+        }
     }
 }
 
@@ -290,7 +335,7 @@ extension LibraryViewController: PublicationCollectionViewCellDelegate {
         present(removePublicationAlert, animated: true, completion: nil)
     }
 
-    func displayInformation(forCellAt indexPath: IndexPath) {
+    func presentMetadata(forCellAt indexPath: IndexPath) {
         let book = books[indexPath.row]
 
         Task {
@@ -298,9 +343,9 @@ extension LibraryViewController: PublicationCollectionViewCellDelegate {
                 guard let pub = try await library.openBook(book, sender: self) else {
                     return
                 }
-                let detailsViewController = self.factory.make(publication: pub)
-                detailsViewController.modalPresentationStyle = .popover
-                self.navigationController?.pushViewController(detailsViewController, animated: true)
+                let pubMetadataViewController = UIHostingController(rootView: PublicationMetadataView(publication: pub))
+                pubMetadataViewController.modalPresentationStyle = .popover
+                self.navigationController?.pushViewController(pubMetadataViewController, animated: true)
             } catch {
                 libraryDelegate?.presentError(UserError(error), from: self)
             }

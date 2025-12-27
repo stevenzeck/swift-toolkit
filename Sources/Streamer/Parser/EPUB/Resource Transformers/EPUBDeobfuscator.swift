@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -33,9 +33,9 @@ final class EPUBDeobfuscator {
     func deobfuscate(resource: Resource, at href: AnyURL) -> Resource {
         // Checks if the resource is obfuscated with a known algorithm.
         guard
-            let href = href.relativeURL,
+            let href = href.relativeURL?.normalized,
             !publicationId.isEmpty, publicationId != "urn:uuid:",
-            let algorithmId = encryptions[equivalent: href]?.algorithm,
+            let algorithmId = encryptions[href]?.algorithm,
             let algorithm = algorithms.first(withIdentifier: algorithmId)
         else {
             return resource
@@ -57,10 +57,6 @@ final class EPUBDeobfuscator {
             self.key = key
         }
 
-        func close() {
-            resource.close()
-        }
-
         let sourceURL: AbsoluteURL? = nil
 
         func estimatedLength() async -> ReadResult<UInt64?> {
@@ -72,20 +68,24 @@ final class EPUBDeobfuscator {
         }
 
         func stream(range: Range<UInt64>?, consume: @escaping (Data) -> Void) async -> ReadResult<Void> {
-            await resource.stream(
+            var readPosition = range?.lowerBound ?? 0
+            let obfuscatedLength = algorithm.obfuscatedLength
+
+            return await resource.stream(
                 range: range,
                 consume: { data in
                     var data = data
 
-                    let range = range ?? 0 ..< UInt64(data.count)
-                    if range.lowerBound < self.algorithm.obfuscatedLength {
-                        let toDeobfuscate = max(range.lowerBound, 0) ..< min(range.upperBound, UInt64(self.algorithm.obfuscatedLength))
-
-                        for i in toDeobfuscate {
-                            let i = Int(i)
+                    if readPosition < obfuscatedLength {
+                        for i in 0 ..< data.count {
+                            if readPosition + UInt64(i) >= obfuscatedLength {
+                                break
+                            }
                             data[i] = data[i] ^ self.key[i % self.key.count]
                         }
                     }
+
+                    readPosition += UInt64(data.count)
 
                     consume(data)
                 }

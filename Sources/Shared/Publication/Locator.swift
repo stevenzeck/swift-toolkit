@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -23,9 +23,6 @@ public struct Locator: Hashable, CustomStringConvertible, Loggable, Sendable {
 
     /// Textual context of the locator.
     public var text: Text
-
-    @available(*, unavailable, renamed: "mediaType")
-    public var type: String { mediaType.string }
 
     public init<T: URLConvertible>(href: T, mediaType: MediaType, title: String? = nil, locations: Locations = .init(), text: Text = .init()) {
         self.href = href.anyURL
@@ -94,9 +91,6 @@ public struct Locator: Hashable, CustomStringConvertible, Loggable, Sendable {
             text: Text(json: jsonObject["text"], warnings: warnings)
         )
     }
-
-    @available(*, unavailable, message: "This may create an incorrect `Locator` if the link `type` is missing. Use `publication.locate(Link)` instead.")
-    public init(link: Link) { fatalError() }
 
     public var json: JSONDictionary.Wrapped {
         makeJSON([
@@ -300,7 +294,11 @@ public struct Locator: Hashable, CustomStringConvertible, Loggable, Sendable {
                 let highlight = highlight,
                 !highlight.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
-                preconditionFailure("highlight is nil")
+                return Locator.Text(
+                    after: after.takeIf { !$0.isEmpty },
+                    before: before.takeIf { !$0.isEmpty },
+                    highlight: nil
+                )
             }
 
             let range = range
@@ -337,9 +335,6 @@ public extension Array where Element == Locator {
         map(\.json)
     }
 }
-
-@available(*, unavailable, renamed: "LocatorCollection")
-public typealias _LocatorCollection = LocatorCollection
 
 /// Represents a sequential list of `Locator` objects.
 ///

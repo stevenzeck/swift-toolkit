@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -28,7 +28,6 @@ extension Container {
         guard let resource = self[href] else {
             return nil
         }
-        defer { resource.close() }
         return try await resource.read().get()
     }
 
@@ -42,7 +41,6 @@ extension Container {
             guard let resource = self[url] else {
                 continue
             }
-            defer { resource.close() }
 
             switch await assetRetriever.sniffFormat(of: resource) {
             case let .success(format):

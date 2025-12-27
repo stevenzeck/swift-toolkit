@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -168,17 +168,5 @@ private extension String {
         }
 
         return segments.joined(separator: "/")
-    }
-}
-
-public extension Dictionary where Key: URLProtocol {
-    /// Returns the value of the first key matching `key` after normalization.
-    subscript<T: URLConvertible>(equivalent key: T) -> Value? {
-        for (k, v) in self {
-            if k.isEquivalentTo(key) {
-                return v
-            }
-        }
-        return nil
     }
 }

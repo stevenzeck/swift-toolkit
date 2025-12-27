@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -168,34 +168,5 @@ public struct Manifest: JSONEquatable, Hashable, Sendable {
     /// Finds all the links matching the given predicate in the manifest's links.
     public func linksMatching(_ predicate: (Link) -> Bool) -> [Link] {
         (readingOrder + resources + links).filter(predicate)
-    }
-
-    @available(*, unavailable, renamed: "linkWithHREF")
-    public func link(withHREF href: String) -> Link? {
-        fatalError()
-    }
-
-    @available(*, unavailable, renamed: "linkWithRel")
-    public func link(withRel rel: LinkRelation) -> Link? {
-        fatalError()
-    }
-
-    @available(*, unavailable, renamed: "linksWithRel")
-    public func links(withRel rel: LinkRelation) -> [Link] {
-        fatalError()
-    }
-
-    /// Makes a copy of the `Manifest`, after modifying some of its properties.
-    @available(*, unavailable, message: "Make a mutable copy of the struct instead")
-    public func copy(
-        context: [String]? = nil,
-        metadata: Metadata? = nil,
-        links: [Link]? = nil,
-        readingOrder: [Link]? = nil,
-        resources: [Link]? = nil,
-        tableOfContents: [Link]? = nil,
-        subcollections: [String: [PublicationCollection]]? = nil
-    ) -> Manifest {
-        fatalError()
     }
 }

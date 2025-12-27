@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -30,9 +30,6 @@ public struct EditingAction: Hashable {
     /// On iOS 16+, enabling this action will show two items: Look Up and
     /// Search Web.
     public static let lookup = EditingAction(kind: .native(["lookup", "_lookup:", "define:", "_define:"]))
-
-    @available(*, unavailable, message: "lookup and define were merged", renamed: "lookup")
-    public static let define = lookup
 
     /// Translate the text selection.
     public static let translate = EditingAction(kind: .native(["translate:", "_translate:"]))
@@ -120,6 +117,12 @@ final class EditingActionsController {
     }
 
     func canPerformAction(_ selector: Selector) -> Bool {
+        // Accessibility editing actions (e.g. Spoken Option in Accessibility
+        // system settings) cannot be properly disabled.
+        guard !selector.description.hasPrefix("_accessibility") else {
+            return true
+        }
+
         guard
             isEnabled,
             let selection = selection,

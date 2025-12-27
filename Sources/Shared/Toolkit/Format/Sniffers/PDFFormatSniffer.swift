@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -10,6 +10,8 @@ import Foundation
 ///
 /// Reference: https://www.loc.gov/preservation/digital/formats/fdd/fdd000123.shtml
 public struct PDFFormatSniffer: FormatSniffer {
+    public init() {}
+
     public func sniffHints(_ hints: FormatHints) -> Format? {
         if
             hints.hasFileExtension("pdf") ||

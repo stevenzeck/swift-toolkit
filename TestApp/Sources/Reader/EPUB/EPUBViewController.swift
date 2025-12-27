@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -30,14 +30,15 @@ class EPUBViewController: VisualReaderViewController<EPUBNavigatorViewController
         preferencesStore: AnyUserPreferencesStore<EPUBPreferences>,
         httpServer: HTTPServer
     ) throws {
-        var templates = HTMLDecorationTemplate.defaultTemplates()
+        // Create default templates, but make highlights opaque with experimental positioning.
+        var templates = HTMLDecorationTemplate.defaultTemplates(alpha: 1.0, experimentalPositioning: true)
         templates[.pageList] = .pageList
 
         let resources = FileURL(url: Bundle.main.resourceURL!)!
         let navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: locator,
-            config: .init(
+            config: EPUBNavigatorViewController.Configuration(
                 preferences: initialPreferences,
                 editingActions: EditingAction.defaultActions
                     .appending(EditingAction(

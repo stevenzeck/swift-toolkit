@@ -1,11 +1,11 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
 
 import Foundation
-import Fuzi
+import ReadiumFuzi
 import ReadiumShared
 
 /// A parser module which provide methods to parse encrypted XML elements.
@@ -26,11 +26,11 @@ final class EPUBEncryptionParser: Loggable {
         self.init(container: container, data: data)
     }
 
-    private lazy var document: Fuzi.XMLDocument? = {
-        let document = try? Fuzi.XMLDocument(data: data)
-        document?.definePrefix("enc", forNamespace: "http://www.w3.org/2001/04/xmlenc#")
-        document?.definePrefix("ds", forNamespace: "http://www.w3.org/2000/09/xmldsig#")
-        document?.definePrefix("comp", forNamespace: "http://www.idpf.org/2016/encryption#compression")
+    private lazy var document: ReadiumFuzi.XMLDocument? = {
+        let document = try? ReadiumFuzi.XMLDocument(data: data)
+        document?.defineNamespace(.enc)
+        document?.defineNamespace(.ds)
+        document?.defineNamespace(.comp)
         return document
     }()
 
@@ -50,6 +50,7 @@ final class EPUBEncryptionParser: Loggable {
                 let algorithm = encryptedDataElement.firstChild(xpath: "enc:EncryptionMethod")?.attr("Algorithm"),
                 let resourceURI = encryptedDataElement.firstChild(xpath: "enc:CipherData/enc:CipherReference")?.attr("URI")
                 .flatMap(RelativeURL.init(epubHREF:))
+                .map(\.normalized)
             else {
                 continue
             }

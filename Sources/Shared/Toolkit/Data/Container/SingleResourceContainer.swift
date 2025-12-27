@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -24,10 +24,6 @@ public class SingleResourceContainer: Container {
             return nil
         }
 
-        return resource.borrowed()
-    }
-
-    public func close() {
-        resource.close()
+        return resource
     }
 }

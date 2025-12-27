@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -8,6 +8,8 @@ import Foundation
 
 /// Sniffs an HTML or XHTML document.
 public struct HTMLFormatSniffer: FormatSniffer {
+    public init() {}
+
     public func sniffHints(_ hints: FormatHints) -> Format? {
         if
             hints.hasFileExtension("htm", "html") ||
@@ -47,10 +49,7 @@ public struct HTMLFormatSniffer: FormatSniffer {
             return nil
         }
 
-        if element.first("xhtml:body|xhtml2:body", with: [
-            (prefix: "xhtml", uri: "http://www.w3.org/1999/xhtml"),
-            (prefix: "xhtml2", uri: "http://www.w3.org/2002/06/xhtml2"),
-        ]) != nil {
+        if element.first("xhtml:body|xhtml2:body", with: [.xhtml, .xhtml2]) != nil {
             return xhtml
         } else {
             return html

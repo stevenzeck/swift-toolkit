@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -150,9 +150,6 @@ public struct Link: JSONEquatable, Hashable, Sendable {
         ])
     }
 
-    @available(*, unavailable, renamed: "mediaType")
-    public var type: String? { mediaType?.string }
-
     /// Returns the URL represented by this link's HREF.
     ///
     /// If the HREF is a template, the `parameters` are used to expand it
@@ -167,7 +164,7 @@ public struct Link: JSONEquatable, Hashable, Sendable {
         if href.isEmpty {
             href = "#"
         }
-        return (AnyURL(string: href) ?? AnyURL(legacyHREF: href))!
+        return (AnyURL(string: href) ?? AnyURL(legacyHREF: href))!.normalized
     }
 
     /// Returns the URL represented by this link's HREF, resolved to the given
@@ -180,7 +177,7 @@ public struct Link: JSONEquatable, Hashable, Sendable {
         parameters: [String: LosslessStringConvertible] = [:]
     ) -> AnyURL {
         let url = url(parameters: parameters)
-        return baseURL?.anyURL.resolve(url) ?? url
+        return baseURL?.anyURL.resolve(url)?.normalized ?? url
     }
 
     // MARK: URI Template
@@ -204,37 +201,9 @@ public struct Link: JSONEquatable, Hashable, Sendable {
         templated = false
     }
 
-    // MARK: Copy
-
-    @available(*, unavailable, message: "Make a mutable copy of the struct instead")
-    /// Makes a copy of the `Link`, after modifying some of its properties.
-    public func copy(
-        href: String? = nil,
-        mediaType: MediaType?? = nil,
-        templated: Bool? = nil,
-        title: String?? = nil,
-        rels: [LinkRelation]? = nil,
-        properties: Properties? = nil,
-        height: Int?? = nil,
-        width: Int?? = nil,
-        bitrate: Double?? = nil,
-        duration: Double?? = nil,
-        languages: [String]? = nil,
-        alternates: [Link]? = nil,
-        children: [Link]? = nil
-    ) -> Link {
-        fatalError()
-    }
-
     ///  Merges in the given additional other `properties`.
     public mutating func addProperties(_ properties: JSONDictionary.Wrapped) {
         self.properties.add(properties)
-    }
-
-    ///  Makes a copy of this `Link` after merging in the given additional other `properties`.
-    @available(*, unavailable, message: "Use `addProperties` on a mutable copy")
-    public func addingProperties(_ properties: [String: Any]) -> Link {
-        fatalError()
     }
 }
 
@@ -331,20 +300,5 @@ public extension Array where Element == Link {
                 mediaType.matches(link.mediaType)
             }
         }
-    }
-
-    @available(*, unavailable, message: "This API will be removed.")
-    func firstIndex<T: Equatable>(withProperty otherProperty: String, matching: T, recursively: Bool = false) -> Int? {
-        firstIndex { ($0.properties.otherProperties[otherProperty] as? T) == matching }
-    }
-
-    @available(*, unavailable, renamed: "firstWithHREF")
-    func first(withHref href: String) -> Link? {
-        fatalError()
-    }
-
-    @available(*, unavailable, renamed: "firstIndexWithHREF")
-    func firstIndex(withHref href: String) -> Int? {
-        fatalError()
     }
 }

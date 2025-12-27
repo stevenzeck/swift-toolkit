@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -9,7 +9,6 @@ import ReadiumInternal
 import ReadiumShared
 
 private let lcpScheme = "http://readium.org/2014/01/lcp"
-private let AESBlockSize: UInt64 = 16 // bytes
 
 /// Decrypts a resource protected with LCP.
 final class LCPDecryptor {
@@ -27,10 +26,14 @@ final class LCPDecryptor {
 
     init(license: LCPLicense?, encryptionData: [AnyURL: ReadiumShared.Encryption]) {
         self.license = license
-        self.encryptionData = encryptionData
+        self.encryptionData = encryptionData.reduce(into: [:]) { result, item in
+            result[item.key.normalized] = item.value
+        }
     }
 
     func decrypt(at href: AnyURL, resource: Resource) -> Resource {
+        let href = href.normalized
+
         // Checks if the resource is encrypted and whether the encryption
         // schemes of the resource and the DRM license are the same.
         guard let encryption = encryptionData[href], encryption.scheme == lcpScheme else {
@@ -44,18 +47,11 @@ final class LCPDecryptor {
             return FullLCPResource(resource, license: license, encryption: encryption).cached()
 
         } else {
-            // The ZIP library we currently use doesn't support random access in deflated entries, which causes really
-            // bad performances when reading a resource by chunks (e.g. reading a large PDF).
-            //
-            // A workaround is to cache the resource input stream to reuse it when being requested consecutive ranges.
-            // However this isn't enough for LCP, because when requesting a range from an LCP resource, we always read
-            // a bit more to align the data with the next AES block. This means that consecutive requests are not
-            // properly aligned and the cached input stream is discarded.
-            //
-            // To fix this issue, we use a `BufferedResource` around the ZIP resource which will keep in memory a few
-            // of the previously read bytes. They can then be used to complete the next requested range from the
-            // cached input stream's current offset.
-            //
+            // We use a buffered resource because when requesting a range from
+            // an LCP resource, we always read a bit more to align the data with
+            // the next AES block. This means that consecutive requests are not
+            // properly aligned and might throw off any optimization reusing
+            // a single input stream.
             // See https://github.com/readium/r2-shared-swift/issues/98
             // and https://github.com/readium/r2-shared-swift/pull/119
             return CBCLCPResource(resource.buffered(), license: license, encryption: encryption)
@@ -101,10 +97,6 @@ final class LCPDecryptor {
             self.encryption = encryption
         }
 
-        func close() {
-            resource.close()
-        }
-
         let sourceURL: AbsoluteURL? = nil
 
         func properties() async -> ReadResult<ResourceProperties> {
@@ -112,17 +104,19 @@ final class LCPDecryptor {
         }
 
         func estimatedLength() async -> ReadResult<UInt64?> {
-            await plainTextSize()
+            await plainTextSize
         }
 
-        private lazy var plainTextSize = memoize(_plainTextSize)
+        private var plainTextSize: ReadResult<UInt64?> {
+            get async { await plainTextSizeTask.value }
+        }
 
-        private func _plainTextSize() async -> ReadResult<UInt64?> {
+        private lazy var plainTextSizeTask = Task<ReadResult<UInt64?>, Never> {
             await resource.estimatedLength().asyncFlatMap { length in
                 guard let length = length else {
                     return failure(.requiredEstimatedLength)
                 }
-                guard length >= 2 * AESBlockSize else {
+                guard length.isValidAESChunk else {
                     return failure(.invalidCBCData)
                 }
 
@@ -170,7 +164,7 @@ final class LCPDecryptor {
                 let encryptedEndExclusive = (rangeLast + 1).ceilMultiple(of: AESBlockSize) + AESBlockSize
 
                 return await resource.read(range: encryptedStart ..< encryptedEndExclusive)
-                    .combine(plainTextSize())
+                    .combine(plainTextSize)
                     .flatMap { encryptedData, plainTextSize in
                         do {
                             guard let plainTextSize = plainTextSize else {
@@ -212,6 +206,10 @@ final class LCPDecryptor {
 private extension LCPLicense {
     func decryptFully(data: ReadResult<Data>, isDeflated: Bool) async -> ReadResult<Data> {
         data.flatMap {
+            guard UInt64($0.count).isValidAESChunk else {
+                return .failure(.decoding(LCPDecryptor.Error.invalidCBCData))
+            }
+
             do {
                 // Decrypts the resource.
                 guard var data = try self.decipher($0) else {
@@ -248,12 +246,14 @@ private extension ReadiumShared.Encryption {
     }
 }
 
-private extension UInt64 {
-    func ceilMultiple(of divisor: UInt64) -> UInt64 {
-        divisor * (self / divisor + ((self % divisor == 0) ? 0 : 1))
-    }
+private let AESBlockSize: UInt64 = 16 // bytes
 
-    func floorMultiple(of divisor: UInt64) -> UInt64 {
-        divisor * (self / divisor)
+private extension UInt64 {
+    /// Checks if this number is a valid CBC length - i.e. a multiple of AES
+    /// block size and at least 2 blocks (IV + data).
+    /// If not, the file is likely not actually encrypted despite being declared
+    /// as such.
+    var isValidAESChunk: Bool {
+        self >= 2 * AESBlockSize && self % AESBlockSize == 0
     }
 }

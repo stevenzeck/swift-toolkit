@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -96,7 +96,7 @@ class OPDSPublicationInfoViewController: UIViewController, Loggable {
             downloadButton.isEnabled = false
 
             do {
-                let book = try await delegate.opdsDownloadPublication(publication, at: downloadLink, sender: self)
+                let book = try await delegate.opdsDownloadPublication(publication, at: downloadLink, sender: self, progress: { _ in })
                 delegate.presentAlert(
                     NSLocalizedString("success_title", comment: "Title of the alert when a publication is successfully downloaded"),
                     message: String(format: NSLocalizedString("library_download_success_message", comment: "Message of the alert when a publication is successfully downloaded"), book.title),

@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -93,7 +93,7 @@ public class PublicationOpener {
         switch await parser.parse(asset: asset, warnings: warnings) {
         case var .success(builder):
             for transform in builderTransforms {
-                builder.apply(transform)
+                await builder.apply(transform)
             }
             return .success(builder.build())
 

@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -53,13 +53,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        guard let url = url.absoluteURL, let vc = window?.rootViewController else {
+        guard let url = url.anyURL.absoluteURL, let vc = window?.rootViewController else {
             return false
         }
 
         Task {
             do {
-                try await app.library.importPublication(from: url, sender: vc)
+                try await app.library.importPublication(from: url, sender: vc, progress: { _ in })
             } catch {
                 guard let error = error as? UserErrorConvertible else {
                     print(error)

@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -37,6 +37,8 @@ final class EPUBNavigatorViewModel: Loggable {
     /// Local file URL associated to the HTTP URL used to serve the file on the
     /// `httpServer`. This is used to serve custom font files, for example.
     @Atomic private var servedFiles: [FileURL: HTTPURL] = [:]
+
+    var readingOrder: ReadingOrder { publication.readingOrder }
 
     convenience init(
         publication: Publication,
@@ -83,15 +85,6 @@ final class EPUBNavigatorViewModel: Loggable {
                 self?.injectReadiumCSS(in: resource, at: href) ?? resource
             }
         }
-    }
-
-    @available(*, unavailable, message: "See the 2.5.0 migration guide to migrate the Settings API")
-    convenience init(
-        publication: Publication,
-        config: EPUBNavigatorViewController.Configuration,
-        resourcesServer: ResourcesServer
-    ) {
-        fatalError()
     }
 
     private init(
@@ -227,6 +220,7 @@ final class EPUBNavigatorViewModel: Loggable {
                 || oldSettings.verticalText != newSettings.verticalText
                 || oldSettings.scroll != newSettings.scroll
                 || oldSettings.spread != newSettings.spread
+                || oldSettings.fit != newSettings.fit
 
         // We don't commit the CSS changes if we invalidate the pagination, as
         // the resources will be reloaded anyway.
@@ -248,6 +242,7 @@ final class EPUBNavigatorViewModel: Loggable {
     var readingProgression: ReadingProgression { settings.readingProgression }
     var theme: Theme { settings.theme }
     var scroll: Bool { settings.scroll }
+    var verticalText: Bool { settings.verticalText }
     var spread: Spread { settings.spread }
 
     // MARK: Spread
@@ -294,7 +289,7 @@ final class EPUBNavigatorViewModel: Loggable {
         guard
             let link = publication.linkWithHREF(href),
             link.mediaType?.isHTML == true,
-            publication.metadata.presentation.layout(of: link) == .reflowable
+            publication.metadata.layout == .reflowable
         else {
             return resource
         }

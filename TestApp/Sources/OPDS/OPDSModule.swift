@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -7,6 +7,7 @@
 import Combine
 import Foundation
 import ReadiumShared
+import SwiftUI
 import UIKit
 
 enum OPDSError: Error {
@@ -23,8 +24,13 @@ protocol OPDSModuleAPI {
 }
 
 protocol OPDSModuleDelegate: ModuleDelegate {
-    /// Called when an OPDS publication needs to be downloaded.
-    func opdsDownloadPublication(_ publication: Publication?, at link: Link, sender: UIViewController) async throws -> Book
+    /// Called when an OPDS publication needs to be imported.
+    func opdsDownloadPublication(
+        _ publication: Publication?,
+        at link: ReadiumShared.Link,
+        sender: UIViewController,
+        progress: @escaping (Double) -> Void
+    ) async throws -> Book
 }
 
 final class OPDSModule: OPDSModuleAPI {
@@ -38,7 +44,32 @@ final class OPDSModule: OPDSModuleAPI {
     }
 
     private(set) lazy var rootViewController: UINavigationController = {
-        let catalogViewController: OPDSCatalogSelectorViewController = factory.make()
-        return UINavigationController(rootViewController: catalogViewController)
+        let viewModel = OPDSCatalogsViewModel()
+
+        let rootView = NavigationStack {
+            OPDSCatalogsView(viewModel: viewModel, delegate: self.delegate)
+                .navigationDestination(for: OPDSCatalog.self) { catalog in
+                    OPDSFeedView(
+                        feedURL: catalog.url,
+                        delegate: self.delegate
+                    )
+                }
+                .navigationDestination(for: URL.self) { url in
+                    OPDSFeedView(feedURL: url, delegate: self.delegate)
+                }
+                .navigationDestination(for: OPDSFeedView.NavigablePublication.self) { navPublication in
+                    OPDSPublicationInfoView(publication: navPublication.publication)
+                }
+        }
+
+        let catalogViewController = UIHostingController(rootView: rootView)
+
+        let navigationController = UINavigationController(rootViewController: catalogViewController)
+
+        navigationController.isNavigationBarHidden = true
+
+        viewModel.openCatalog = nil
+
+        return navigationController
     }()
 }

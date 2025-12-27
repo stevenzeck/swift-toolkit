@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -18,7 +18,7 @@ public struct DirectoryContainer: Container, Loggable {
     /// `entries`.
     public init(directory: FileURL, entries: Set<RelativeURL>) {
         directoryURL = directory
-        self.entries = Set(entries.map(\.anyURL))
+        self.entries = Set(entries.map(\.anyURL.normalized))
     }
 
     /// Creates a ``DirectoryContainer`` at `directory` serving all its children

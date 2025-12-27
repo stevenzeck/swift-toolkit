@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -11,7 +11,7 @@ class ContentProtectionServiceTests: XCTestCase {
     func testGetUnknown() {
         let service = TestContentProtectionService()
 
-        let resource = service.get(link: Link(href: "/unknown"))
+        let resource = service.get(AnyURL(string: "/unknown")!)
 
         XCTAssertNil(resource)
     }
@@ -93,11 +93,11 @@ struct TestContentProtectionService: ContentProtectionService {
     var name: LocalizedString? = nil
 
     func getCopy(text: String, peek: Bool) throws -> Resource {
-        try XCTUnwrap(get(link: Link(href: "~readium/rights/copy?text=\(text)&peek=\(peek)")))
+        try XCTUnwrap(get(AnyURL(string: "~readium/rights/copy?text=\(text)&peek=\(peek)")!))
     }
 
     func getPrint(pageCount: Int, peek: Bool) throws -> Resource {
-        try XCTUnwrap(get(link: Link(href: "~readium/rights/print?pageCount=\(pageCount)&peek=\(peek)")))
+        try XCTUnwrap(get(AnyURL(string: "~readium/rights/print?pageCount=\(pageCount)&peek=\(peek)")!))
     }
 }
 

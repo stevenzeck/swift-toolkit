@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -13,6 +13,7 @@ import ReadiumShared
 public struct EPUBSettings: ConfigurableSettings {
     public var backgroundColor: Color?
     public var columnCount: ColumnCount
+    public var fit: Fit
     public var fontFamily: FontFamily?
     public var fontSize: Double
     public var fontWeight: Double?
@@ -46,6 +47,7 @@ public struct EPUBSettings: ConfigurableSettings {
     public init(
         backgroundColor: Color?,
         columnCount: ColumnCount,
+        fit: Fit,
         fontFamily: FontFamily?,
         fontSize: Double,
         fontWeight: Double?,
@@ -72,6 +74,7 @@ public struct EPUBSettings: ConfigurableSettings {
     ) {
         self.backgroundColor = backgroundColor
         self.columnCount = columnCount
+        self.fit = fit
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.fontWeight = fontWeight
@@ -139,6 +142,9 @@ public struct EPUBSettings: ConfigurableSettings {
             columnCount: preferences.columnCount
                 ?? defaults.columnCount
                 ?? .auto,
+            fit: preferences.fit
+                ?? defaults.fit
+                ?? .auto,
             fontFamily: preferences.fontFamily,
             fontSize: preferences.fontSize
                 ?? defaults.fontSize
@@ -169,7 +175,6 @@ public struct EPUBSettings: ConfigurableSettings {
             readingProgression: readingProgression,
             scroll: scroll,
             spread: preferences.spread
-                ?? Spread(metadata.presentation.spread)
                 ?? defaults.spread
                 ?? .auto,
             textAlign: preferences.textAlign
@@ -197,6 +202,7 @@ public struct EPUBSettings: ConfigurableSettings {
 /// See `EPUBPreferences`.
 public struct EPUBDefaults {
     public var columnCount: ColumnCount?
+    public var fit: Fit?
     public var fontSize: Double?
     public var fontWeight: Double?
     public var hyphens: Bool?
@@ -219,6 +225,7 @@ public struct EPUBDefaults {
 
     public init(
         columnCount: ColumnCount? = nil,
+        fit: Fit? = nil,
         fontSize: Double? = nil,
         fontWeight: Double? = nil,
         hyphens: Bool? = nil,
@@ -240,6 +247,7 @@ public struct EPUBDefaults {
         wordSpacing: Double? = nil
     ) {
         self.columnCount = columnCount
+        self.fit = fit
         self.fontSize = fontSize
         self.fontWeight = fontWeight
         self.hyphens = hyphens

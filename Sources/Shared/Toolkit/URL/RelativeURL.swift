@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -35,7 +35,7 @@ public struct RelativeURL: URLProtocol, Hashable {
     ///     returns foo/baz
     public func resolve<T: URLConvertible>(_ other: T) -> AnyURL? {
         // other is absolute?
-        guard let relativeURL = other.relativeURL else {
+        guard let relativeURL = other.anyURL.relativeURL else {
             return other.anyURL
         }
         return resolve(relativeURL)?.anyURL
@@ -69,8 +69,21 @@ public struct RelativeURL: URLProtocol, Hashable {
         resolvedComponents.fragment = otherComponents.fragment
         resolvedComponents.query = otherComponents.query
 
-        guard let resolvedURL = resolvedComponents.url?.standardized else {
+        guard var resolvedURL = resolvedComponents.url?.standardized else {
             return nil
+        }
+
+        // Since iOS 26, resolving an `other` URL moving upwards in the
+        // hierarchy can result in an URL starting with a `/`, which is not
+        // what we want.
+        if
+            !path.hasPrefix("/"),
+            !other.path.hasPrefix("/"),
+            resolvedURL.path.hasPrefix("/"),
+            var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: true)
+        {
+            components.path.removeFirst()
+            resolvedURL = components.url ?? resolvedURL
         }
 
         return RelativeURL(url: resolvedURL)
@@ -84,7 +97,7 @@ public struct RelativeURL: URLProtocol, Hashable {
     ///     returns baz
     public func relativize<T: URLConvertible>(_ other: T) -> RelativeURL? {
         guard
-            let relativeURL = other.relativeURL,
+            let relativeURL = other.anyURL.relativeURL,
             relativeURL.string.hasPrefix(string)
         else {
             return nil
@@ -112,8 +125,6 @@ public struct RelativeURL: URLProtocol, Hashable {
 /// Implements `URLConvertible`.
 extension RelativeURL: URLConvertible {
     public var anyURL: AnyURL { .relative(self) }
-    public var relativeURL: RelativeURL? { self }
-    public var absoluteURL: AbsoluteURL? { nil }
 }
 
 public extension RelativeURL {

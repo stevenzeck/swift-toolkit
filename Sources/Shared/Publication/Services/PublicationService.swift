@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -31,15 +31,15 @@ public protocol PublicationService: Closeable {
     ///
     /// Called by `Publication.get()` for each request.
     ///
-    /// - Returns: The Resource containing the response, or null if the service doesn't recognize
-    ///   this request.
-    func get(link: Link) -> Resource?
+    /// - Returns: The Resource containing the response, or null if the service
+    ///   doesn't recognize this request.
+    func get<T: URLConvertible>(_ href: T) -> Resource?
 }
 
 public extension PublicationService {
     var links: [Link] { [] }
 
-    func get(link: Link) -> Resource? { nil }
+    func get<T: URLConvertible>(_ href: T) -> Resource? { nil }
 }
 
 /// Factory used to create a `PublicationService`.
@@ -64,7 +64,4 @@ public struct PublicationServiceContext {
         self.manifest = manifest
         self.container = container
     }
-
-    @available(*, unavailable, renamed: "container")
-    public var fetcher: Fetcher { fatalError() }
 }

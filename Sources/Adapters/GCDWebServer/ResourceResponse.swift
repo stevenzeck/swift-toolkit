@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -19,7 +19,7 @@ enum WebServerResponseError: Error {
 
 /// The object containing the response's ressource data.
 /// If the ressource to be served is too big, multiple responses will be created.
-class ResourceResponse: ReadiumGCDWebServerFileResponse, Loggable {
+class ResourceResponse: ReadiumGCDWebServerResponse, Loggable {
     private let bufferSize = 32 * 1024
 
     private var resource: Resource
@@ -111,9 +111,5 @@ class ResourceResponse: ReadiumGCDWebServerFileResponse, Loggable {
         }
 
         return (try? lastReadData?.get()) ?? Data()
-    }
-
-    override open func close() {
-        resource.close()
     }
 }

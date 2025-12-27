@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -21,7 +21,12 @@ public final class EPUBPreferencesEditor: StatefulPreferencesEditor<EPUBPreferen
         metadata: Metadata,
         defaults: EPUBDefaults
     ) {
-        layout = metadata.presentation.layout ?? .reflowable
+        switch metadata.layout {
+        case .fixed:
+            layout = .fixed
+        default:
+            layout = .reflowable
+        }
         self.defaults = defaults
 
         super.init(
@@ -63,6 +68,18 @@ public final class EPUBPreferencesEditor: StatefulPreferencesEditor<EPUBPreferen
                     && !$0.settings.scroll
             },
             supportedValues: [.auto, .one, .two]
+        )
+
+    /// Method for fitting the content within the viewport.
+    ///
+    /// Only effective with fixed-layout publications.
+    public lazy var fit: AnyEnumPreference<Fit> =
+        enumPreference(
+            preference: \.fit,
+            setting: \.fit,
+            defaultEffectiveValue: defaults.fit ?? .auto,
+            isEffective: { [layout] _ in layout == .fixed },
+            supportedValues: [.auto, .page, .width]
         )
 
     /// Default typeface for the text.

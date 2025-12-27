@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -8,6 +8,8 @@ import Foundation
 
 /// Sniffs a Readium Web Publication package.
 public struct RPFFormatSniffer: FormatSniffer {
+    public init() {}
+
     public func sniffHints(_ hints: FormatHints) -> Format? {
         if hints.hasMediaType("application/audiobook+zip") || hints.hasFileExtension("audiobook") {
             return audiobook

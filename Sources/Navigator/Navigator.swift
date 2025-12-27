@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -66,6 +66,15 @@ public struct NavigatorGoOptions {
         self.animated = animated
         otherOptionsJSON = JSONDictionary(otherOptions) ?? JSONDictionary()
     }
+
+    public static var none: NavigatorGoOptions {
+        NavigatorGoOptions()
+    }
+
+    /// Convenience helper for options that contain only animated: true.
+    public static var animated: NavigatorGoOptions {
+        NavigatorGoOptions(animated: true)
+    }
 }
 
 public extension Navigator {
@@ -88,29 +97,9 @@ public extension Navigator {
     func goBackward(options: NavigatorGoOptions = NavigatorGoOptions()) async -> Bool {
         await goBackward(options: options)
     }
-
-    @available(*, unavailable, message: "Use the async variant")
-    func go(to locator: Locator, animated: Bool = false, completion: @escaping () -> Void = {}) -> Bool {
-        fatalError()
-    }
-
-    @available(*, unavailable, message: "Use the async variant")
-    func go(to link: Link, animated: Bool = false, completion: @escaping () -> Void = {}) -> Bool {
-        fatalError()
-    }
-
-    @available(*, unavailable, message: "Use the async variant")
-    func goForward(animated: Bool = false, completion: @escaping () -> Void = {}) -> Bool {
-        fatalError()
-    }
-
-    @available(*, unavailable, message: "Use the async variant")
-    func goBackward(animated: Bool = false, completion: @escaping () -> Void = {}) -> Bool {
-        fatalError()
-    }
 }
 
-public protocol NavigatorDelegate: AnyObject {
+@MainActor public protocol NavigatorDelegate: AnyObject {
     /// Called when the current position in the publication changed. You should save the locator here to restore the
     /// last read page.
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator)
@@ -142,6 +131,8 @@ public protocol NavigatorDelegate: AnyObject {
 }
 
 public extension NavigatorDelegate {
+    func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {}
+
     func navigator(_ navigator: Navigator, didJumpTo locator: Locator) {}
 
     func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
@@ -154,7 +145,7 @@ public extension NavigatorDelegate {
         true
     }
 
-    func navigator(_ navigator: Navigator, didFailToLoadResourceAt href: String, withError error: ReadError) {}
+    func navigator(_ navigator: Navigator, didFailToLoadResourceAt href: RelativeURL, withError error: ReadError) {}
 }
 
 public enum NavigatorError: Error {

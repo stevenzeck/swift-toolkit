@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -77,14 +77,24 @@ final class EPUBFixedSpreadView: EPUBSpreadView {
         guard isWrapperLoaded else {
             return
         }
-        // Insets the bounds by the notch area (eg. iPhone X) to make sure that the content is not overlapped by the screen notch.
-        let insets = notchAreaInsets
+
+        var insets = delegate?.spreadViewContentInset(self) ?? .zero
+
+        // Use the same insets on the left and right side (the largest one) to
+        // keep the pages centered on the screen even if the notches are not
+        // symmetrical.
+        let horizontalInsets = max(insets.left, insets.right)
+        insets.left = horizontalInsets
+        insets.right = horizontalInsets
+
         let viewportSize = bounds.inset(by: insets).size
+        let fitString = viewModel.settings.fit.rawValue
 
         webView.evaluateJavaScript("""
             spread.setViewport(
                 {'width': \(Int(viewportSize.width)), 'height': \(Int(viewportSize.height))},
-                {'top': \(Int(insets.top)), 'left': \(Int(insets.left)), 'bottom': \(Int(insets.bottom)), 'right': \(Int(insets.right))}
+                {'top': \(Int(insets.top)), 'left': \(Int(insets.left)), 'bottom': \(Int(insets.bottom)), 'right': \(Int(insets.right))},
+                '\(fitString)'
             );
         """)
     }
@@ -93,14 +103,16 @@ final class EPUBFixedSpreadView: EPUBSpreadView {
         guard isWrapperLoaded else {
             return
         }
-        Task {
-            await super.evaluateScript("spread.load(\(spread.jsonString(forBaseURL: viewModel.publicationBaseURL)));")
-        }
+        // We call this directly on the web view on purpose, because this needs
+        // to be executed before the spread is loaded.
+        let spreadJSON = spread.jsonString(
+            forBaseURL: viewModel.publicationBaseURL,
+            readingOrder: viewModel.readingOrder
+        )
+        webView.evaluateJavaScript("spread.load(\(spreadJSON));")
     }
 
-    override func spreadDidLoad() {
-        super.spreadDidLoad()
-
+    override func spreadDidLoad() async {
         for continuation in goToContinuations {
             continuation.resume()
         }
@@ -148,7 +160,7 @@ final class EPUBFixedSpreadView: EPUBSpreadView {
         // Fixed layout resources are always fully visible so we don't use the
         // location.
 
-        if spreadLoaded {
+        if isSpreadLoaded {
             return
         } else {
             await withCheckedContinuation { continuation in

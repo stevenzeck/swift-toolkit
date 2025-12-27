@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -8,7 +8,16 @@ import Foundation
 
 /// A container provides access to a list of `Resource` entries.
 public protocol Container: Closeable {
-    /// Direct source to this container, when available.
+    /// URL locating this container, when available.
+    ///
+    /// This can be used to optimize access to a container's content for the
+    /// caller. For example if the container is available on the local file
+    /// system, a caller might prefer using a file handle instead of the
+    /// ``Container`` API.
+    ///
+    /// Note that this must represent the same content available in
+    /// ``Container``. If you transform the resources content on the fly (e.g.
+    /// with ``TransformingContainer``), then the `sourceURL` becomes nil.
     var sourceURL: AbsoluteURL? { get }
 
     /// List of all the container entries.
@@ -57,12 +66,6 @@ public class CompositeContainer: Container {
     public subscript(url: any URLConvertible) -> Resource? {
         containers.first { container in
             container[url]
-        }
-    }
-
-    public func close() {
-        for container in containers {
-            container.close()
         }
     }
 }

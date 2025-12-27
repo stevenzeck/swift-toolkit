@@ -1,20 +1,20 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
 
 import Foundation
-import Fuzi
+import ReadiumFuzi
 import ReadiumShared
 
 /// A parser for the META-INF/container.xml file.
 final class EPUBContainerParser: Loggable {
-    private let document: Fuzi.XMLDocument
+    private let document: ReadiumFuzi.XMLDocument
 
     init(data: Data) throws {
         document = try XMLDocument(data: data)
-        document.definePrefix("cn", forNamespace: "urn:oasis:names:tc:opendocument:xmlns:container")
+        document.defineNamespace(.cn)
     }
 
     convenience init(container: Container) async throws {

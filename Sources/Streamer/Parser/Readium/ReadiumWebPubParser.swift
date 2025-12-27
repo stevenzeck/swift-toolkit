@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -55,8 +55,9 @@ public class ReadiumWebPubParser: PublicationParser, Loggable {
 
         return await resource.readAsRWPM(warnings: warnings)
             .flatMap { manifest in
-                guard let baseURL = manifest.baseURL else {
-                    return .failure(.decoding("No valid self link found in the manifest"))
+                let baseURL = manifest.baseURL
+                if baseURL == nil {
+                    warnings?.log(RWPMWarning(message: "No valid self link found in the manifest", severity: .moderate))
                 }
 
                 return .success(CompositeContainer(
@@ -100,7 +101,14 @@ public class ReadiumWebPubParser: PublicationParser, Loggable {
         return await manifestResource.readAsRWPM(warnings: warnings)
             .flatMap(checkProfileRequirements(of:))
             .map { manifest in
-                Publication.Builder(
+                var manifest = manifest
+
+                // Remove any self link as it is a packaged publication. It
+                // might be packaged from a streamed manifest which would cause
+                // issues when serving the relative reading order resources.
+                manifest.links = manifest.links.filter { !$0.rels.contains(.self) }
+
+                return Publication.Builder(
                     manifest: manifest,
                     container: container,
                     servicesBuilder: PublicationServicesBuilder(setup: {
@@ -114,6 +122,7 @@ public class ReadiumWebPubParser: PublicationParser, Loggable {
                             $0.setLocatorServiceFactory(AudioLocatorService.makeFactory())
 
                         } else if manifest.conforms(to: .pdf), format.conformsTo(.lcp), let pdfFactory = pdfFactory {
+                            $0.setTableOfContentsServiceFactory(LCPDFTableOfContentsService.makeFactory(pdfFactory: pdfFactory))
                             $0.setPositionsServiceFactory(LCPDFPositionsService.makeFactory(pdfFactory: pdfFactory))
                         }
 
@@ -163,4 +172,12 @@ private extension Streamable {
             }
         }
     }
+}
+
+/// Warning raised when parsing a RWPM.
+public struct RWPMWarning: Warning {
+    public let message: String
+    public let severity: WarningSeverityLevel
+
+    public var tag: String { "rwpm" }
 }

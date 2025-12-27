@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -59,7 +59,7 @@ public extension AbsoluteURL {
     ///     returns bar/baz
     func relativize<T: URLConvertible>(_ other: T) -> RelativeURL? {
         guard
-            let absoluteURL = other.absoluteURL,
+            let absoluteURL = other.anyURL.absoluteURL,
             scheme == absoluteURL.scheme,
             origin == absoluteURL.origin
         else {
@@ -75,16 +75,14 @@ public extension AbsoluteURL {
 
     /// Indicates whether the receiver is relative to the given `base` URL.
     func isRelative<T: URLConvertible>(to base: T) -> Bool {
-        base.absoluteURL?.scheme == scheme
-            && base.absoluteURL?.origin == origin
+        base.anyURL.absoluteURL?.scheme == scheme
+            && base.anyURL.absoluteURL?.origin == origin
     }
 }
 
 /// Implements ``URLConvertible``.
 public extension AbsoluteURL {
     var anyURL: AnyURL { .absolute(self) }
-    var relativeURL: RelativeURL? { nil }
-    var absoluteURL: AbsoluteURL? { self }
 }
 
 /// A URL scheme, e.g. http or file.

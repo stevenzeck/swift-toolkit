@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -51,6 +51,6 @@ public struct HTTPURL: AbsoluteURL, Hashable, Sendable {
 public extension URLConvertible {
     /// Returns an `HTTPURL` if the URL has an `http` or `https` scheme.
     var httpURL: HTTPURL? {
-        (absoluteURL as? HTTPURL) ?? HTTPURL(url: anyURL.url)
+        (anyURL.absoluteURL as? HTTPURL) ?? HTTPURL(url: anyURL.url)
     }
 }

@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Readium Foundation. All rights reserved.
+//  Copyright 2025 Readium Foundation. All rights reserved.
 //  Use of this source code is governed by the BSD-style license
 //  available in the top-level LICENSE file of the project.
 //
@@ -32,6 +32,26 @@ public struct Language: Hashable, Sendable {
     }
 
     public let code: Code
+
+    public struct Region: Hashable, Sendable, ExpressibleByStringLiteral {
+        public let code: String
+
+        public init(code: String) {
+            self.code = code
+        }
+
+        public init(stringLiteral value: StringLiteralType) {
+            self.init(code: value)
+        }
+
+        public func localizedName(in targetLocale: Locale = Locale.current) -> String? {
+            targetLocale.localizedString(forRegionCode: code)
+        }
+    }
+
+    public var region: Region? {
+        locale.regionCode.flatMap { Region(code: $0) }
+    }
 
     public var locale: Locale { Locale(identifier: code.bcp47) }
 
