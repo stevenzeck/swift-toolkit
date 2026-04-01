@@ -84,9 +84,8 @@ public extension HTTPServer {
                 url: request.url,
                 status: .notFound,
                 headers: [:],
-                mediaType: nil,
-                body: nil
-            ))
+                mediaType: nil
+            ), body: Data())
 
             guard
                 let href = request.href,

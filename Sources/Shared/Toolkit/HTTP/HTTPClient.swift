@@ -15,34 +15,31 @@ public protocol HTTPClient: Loggable {
     ///
     /// - Parameters:
     ///   - request: Request to the streamed resource.
-    ///     also access it in the completion block after consuming the data.
+    ///   - onReceiveResponse: Optional callback allowing you to intercept the response headers and cancel early.
     ///   - consume: Callback called for each chunk of data received. Callers
     ///     are responsible to accumulate the data if needed. Return an error
     ///     to abort the request.
     func stream(
         request: HTTPRequestConvertible,
+        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)?,
         consume: @escaping (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse>
 }
 
 public extension HTTPClient {
-    /// Fetches the resource from the given `request`.
-    func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<HTTPResponse> {
+    /// Fetches the resource from the given `request` and returns the response alongside the accumulated data.
+    func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<(HTTPResponse, Data)> {
         var data = Data()
-        let response = await stream(
+        let responseResult = await stream(
             request: request,
+            onReceiveResponse: nil,
             consume: { chunk, _ in
                 data.append(chunk)
                 return .success(())
             }
         )
 
-        return response
-            .map {
-                var response = $0
-                response.body = data
-                return response
-            }
+        return responseResult.map { ($0, data) }
     }
 
     /// Fetches the resource and attempts to decode it with the given `decoder`.
@@ -53,12 +50,9 @@ public extension HTTPClient {
         decoder: @escaping (HTTPResponse, Data) throws -> T?
     ) async -> HTTPResult<T> {
         await fetch(request)
-            .flatMap { response in
+            .flatMap { response, body in
                 do {
-                    guard
-                        let body = response.body,
-                        let result = try decoder(response, body)
-                    else {
+                    guard let result = try decoder(response, body) else {
                         return .failure(.malformedResponse(nil))
                     }
                     return .success(result)
@@ -93,7 +87,7 @@ public extension HTTPClient {
 
     /// Downloads the resource at a temporary location.
     ///
-    /// You are responsible for moving or deleting the downloaded file in the `completion` block.
+    /// You are responsible for moving or deleting the downloaded file.
     func download(
         _ request: HTTPRequestConvertible,
         onProgress: @escaping (Double) -> Void
@@ -115,6 +109,7 @@ public extension HTTPClient {
 
         let result = await stream(
             request: request,
+            onReceiveResponse: nil,
             consume: { data, progression in
                 do {
                     try fileHandle.seekToEnd()
@@ -213,23 +208,18 @@ public struct HTTPResponse: Equatable {
     /// Media type provided in the `Content-Type` header.
     public let mediaType: MediaType?
 
-    /// Response body content, when available.
-    public var body: Data?
-
     public init(
         request: HTTPRequest,
         url: HTTPURL,
         status: HTTPStatus,
         headers: [String: String],
-        mediaType: MediaType?,
-        body: Data?
+        mediaType: MediaType?
     ) {
         self.request = request
         self.url = url
         self.status = status
         self.headers = headers
         self.mediaType = mediaType
-        self.body = body
     }
 
     /// Finds the value of the first header matching the given name.

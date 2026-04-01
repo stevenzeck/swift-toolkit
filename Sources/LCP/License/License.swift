@@ -223,7 +223,7 @@ extension License: LCPLicense {
             // done, in case it changed the License.
             return try await httpClient
                 .fetch(HTTPRequest(url: statusURL, headers: ["Accept": MediaType.lcpStatusDocument.string]))
-                .map { $0.body ?? Data() }
+                .map(\.1)
                 .get()
         }
 
@@ -251,10 +251,10 @@ extension License: LCPLicense {
             let url = try await makeRenewURL(from: preferredEndDate())
 
             return try await httpClient.fetch(HTTPRequest(url: url, method: .put))
-                .map { $0.body ?? Data() }
+                .map(\.1)
                 .mapError { error -> RenewError in
                     switch error {
-                    case let .errorResponse(response):
+                    case let .errorResponse(response, _):
                         switch response.status {
                         case .badRequest:
                             return .renewFailed
@@ -298,7 +298,7 @@ extension License: LCPLicense {
             let data = try await httpClient.fetch(HTTPRequest(url: url, method: .put))
                 .mapError { error -> ReturnError in
                     switch error {
-                    case let .errorResponse(response):
+                    case let .errorResponse(response, _):
                         switch response.status {
                         case .badRequest:
                             return .returnFailed
@@ -311,7 +311,7 @@ extension License: LCPLicense {
                         return .unexpectedServerError(error)
                     }
                 }
-                .map { $0.body ?? Data() }
+                .map(\.1)
                 .get()
 
             try await validateStatusDocument(data: data)
