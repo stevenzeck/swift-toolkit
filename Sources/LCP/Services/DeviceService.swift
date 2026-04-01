@@ -59,7 +59,7 @@ final class DeviceService {
         }
 
         let data = await httpClient.fetch(HTTPRequest(url: url, method: .post))
-            .map(\.body)
+            .map(\.1)
 
         try await repository.registerDevice(for: license.id)
 

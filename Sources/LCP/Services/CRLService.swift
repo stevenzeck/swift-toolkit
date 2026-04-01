@@ -49,13 +49,15 @@ final class CRLService {
     private func fetch(timeout: TimeInterval? = nil) async throws -> String {
         let url = HTTPURL(string: "http://crl.edrlab.telesec.de/rl/EDRLab_CA.crl")!
 
-        let response = try await httpClient.fetch(HTTPRequest(url: url, timeoutInterval: timeout))
+        let (_, data) = try await httpClient.fetch(HTTPRequest(url: url, timeoutInterval: timeout))
             .mapError { _ in LCPError.crlFetching }
             .get()
 
-        guard let body = response.body?.base64EncodedString() else {
+        guard !data.isEmpty else {
             throw LCPError.crlFetching
         }
+
+        let body = data.base64EncodedString()
         return "-----BEGIN X509 CRL-----\(body)-----END X509 CRL-----"
     }
 

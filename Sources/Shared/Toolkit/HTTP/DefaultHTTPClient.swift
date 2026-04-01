@@ -23,17 +23,15 @@ public enum URLAuthenticationChallengeResponse: Sendable {
 public protocol DefaultHTTPClientDelegate: AnyObject {
     /// Tells the delegate that the HTTP client will start a new `request`.
     ///
-    /// Warning: You MUST call the `completion` handler with the request to start, otherwise the client will hang.
-    ///
     /// You can modify the `request`, for example by adding additional HTTP headers or redirecting to a different URL,
-    /// before calling the `completion` handler with the new request.
+    /// before returning the new request.
     func httpClient(_ httpClient: DefaultHTTPClient, willStartRequest request: HTTPRequest) async -> HTTPResult<HTTPRequestConvertible>
 
     /// Asks the delegate to recover from an `error` received for the given `request`.
     ///
     /// This can be used to implement custom authentication flows, for example.
     ///
-    /// You can call the `completion` handler with either:
+    /// You can return either:
     ///   * a new request to start
     ///   * the `error` argument, if you cannot recover from it
     ///   * a new `HTTPError` to provide additional information
@@ -51,7 +49,7 @@ public protocol DefaultHTTPClientDelegate: AnyObject {
     /// You do not need to do anything with this `response`, which the HTTP client will handle. This is merely for
     /// informational purposes.
     ///
-    /// This will be called only if `httpClient(_:recoverRequest:fromError:completion:)` is not implemented, or returns
+    /// This will be called only if `httpClient(_:recoverRequest:fromError:)` is not implemented, or returns
     /// an error.
     func httpClient(_ httpClient: DefaultHTTPClient, request: HTTPRequest, didFailWithError error: HTTPError)
 
@@ -113,6 +111,11 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         return "\(appName)/\(appVersion) \(deviceName) \(device.systemName)/\(device.systemVersion) CFNetwork/\(cfNetworkVersion) Darwin/\(darwinVersion)"
     }()
 
+    public weak var delegate: DefaultHTTPClientDelegate?
+
+    private let session: URLSession
+    private let userAgent: String
+
     /// Creates a `DefaultHTTPClient` with common configuration settings.
     ///
     /// - Parameters:
@@ -152,12 +155,6 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         self.init(configuration: config, userAgent: userAgent, delegate: delegate)
     }
 
-    public weak var delegate: DefaultHTTPClientDelegate?
-
-    private let tasks: HTTPTaskManager
-    private let session: URLSession
-    private let userAgent: String
-
     /// Creates a `DefaultHTTPClient` with a custom configuration.
     ///
     /// - Parameters:
@@ -169,14 +166,9 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         userAgent: String? = nil,
         delegate: DefaultHTTPClientDelegate? = nil
     ) {
-        let tasks = HTTPTaskManager()
-
         self.userAgent = userAgent ?? DefaultHTTPClient.defaultUserAgent
         self.delegate = delegate
-        self.tasks = tasks
-        // Note that URLSession keeps a strong reference to its delegate, so we
-        // don't use the DefaultHTTPClient itself as its delegate.
-        session = URLSession(configuration: configuration, delegate: tasks, delegateQueue: nil)
+        session = URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
     }
 
     deinit {
@@ -185,51 +177,100 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
     public func stream(
         request: any HTTPRequestConvertible,
+        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)? = nil,
         consume: @escaping (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
-                await startTask(for: request, consume: consume)
+                await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
                     .asyncRecover { error in
                         await recover(request, from: error)
                             .asyncFlatMap { newRequest in
-                                await stream(request: newRequest, consume: consume)
+                                await stream(request: newRequest, onReceiveResponse: onReceiveResponse, consume: consume)
                             }
                     }
             }
     }
 
-    /// Creates and starts a new task for the `request`, whose cancellable will be exposed through `mediator`.
-    private func startTask(for request: HTTPRequest, consume: @escaping HTTPTask.Consume) async -> HTTPResult<HTTPResponse> {
+    /// Creates and starts an async byte stream for the `request`.
+    private func startTask(
+        for request: HTTPRequest,
+        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)?,
+        consume: @escaping (Data, Double?) -> HTTPResult<Void>
+    ) async -> HTTPResult<HTTPResponse> {
         var request = request
         if request.userAgent == nil {
             request.userAgent = userAgent
         }
 
-        let result = await tasks.start(
-            request: request,
-            task: session.dataTask(with: request.urlRequest),
-            receiveResponse: { [weak self] response in
-                if let self = self {
-                    self.delegate?.httpClient(self, request: request, didReceiveResponse: response)
-                }
-            },
-            receiveChallenge: { [weak self] challenge in
-                if let self = self, let delegate = self.delegate {
-                    return await delegate.httpClient(self, request: request, didReceive: challenge)
-                } else {
-                    return .performDefaultHandling
-                }
-            },
-            consume: consume
-        )
+        let taskDelegate = TaskDelegate(request: request, clientDelegate: delegate, client: self)
 
-        if let delegate = delegate, case let .failure(error) = result {
-            delegate.httpClient(self, request: request, didFailWithError: error)
+        do {
+            let (asyncBytes, urlResponse) = try await session.bytes(for: request.urlRequest, delegate: taskDelegate)
+
+            guard let httpURLResponse = urlResponse as? HTTPURLResponse, let url = httpURLResponse.url?.httpURL else {
+                return .failure(.malformedResponse(nil))
+            }
+
+            let response = HTTPResponse(request: request, response: httpURLResponse, url: url)
+            delegate?.httpClient(self, request: request, didReceiveResponse: response)
+
+            guard response.status.isSuccess else {
+                var data = Data()
+                do {
+                    for try await byte in asyncBytes {
+                        data.append(byte)
+                    }
+                } catch {
+                    log(.warning, "Failed to read error response body: \(error)")
+                }
+                return .failure(.errorResponse(response, body: data))
+            }
+
+            if request.hasHeader("Range"), !response.acceptsByteRanges {
+                log(.error, "Streaming ranges requires the remote HTTP server to support byte range requests: \(url)")
+                return .failure(.rangeNotSupported)
+            }
+
+            if let onReceive = onReceiveResponse {
+                if case let .failure(error) = onReceive(response) {
+                    return .failure(error)
+                }
+            }
+
+            var readBytes: Int64 = 0
+            let expectedBytes = response.contentLength
+            var buffer = Data()
+            buffer.reserveCapacity(8192)
+
+            for try await byte in asyncBytes {
+                buffer.append(byte)
+                if buffer.count >= 8192 {
+                    readBytes += Int64(buffer.count)
+                    let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
+                    if case let .failure(error) = consume(buffer, progress) {
+                        return .failure(error)
+                    }
+                    buffer.removeAll(keepingCapacity: true)
+                }
+            }
+
+            if !buffer.isEmpty {
+                readBytes += Int64(buffer.count)
+                let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
+                if case let .failure(error) = consume(buffer, progress) {
+                    return .failure(error)
+                }
+            }
+
+            return .success(response)
+
+        } catch {
+            let httpError: HTTPError = (error is CancellationError) ? .cancelled : (.wrap(error) ?? .other(error))
+            delegate?.httpClient(self, request: request, didFailWithError: httpError)
+            return .failure(httpError)
         }
-
-        return result
     }
 
     /// Lets the `delegate` customize the `request` if needed, before actually starting it.
@@ -241,7 +282,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
             .flatMap { $0.httpRequest() }
     }
 
-    /// Attempts to recover from a `error` by asking the `delegate` for a new request.
+    /// Attempts to recover from an `error` by asking the `delegate` for a new request.
     private func recover(_ request: HTTPRequest, from error: HTTPError) async -> HTTPResult<HTTPRequestConvertible> {
         if let delegate = delegate {
             return await delegate.httpClient(self, recoverRequest: request, fromError: error)
@@ -250,270 +291,44 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         }
     }
 
-    private class HTTPTaskManager: NSObject, URLSessionDataDelegate {
-        /// On-going tasks.
-        @Atomic private var tasks: [HTTPTask] = []
+    /// Isolated proxy to pass challenges back to the `DefaultHTTPClientDelegate`.
+    private final class TaskDelegate: NSObject, URLSessionTaskDelegate {
+        let request: HTTPRequest
+        weak var clientDelegate: DefaultHTTPClientDelegate?
+        weak var client: DefaultHTTPClient?
 
-        func start(
-            request: HTTPRequest,
-            task sessionTask: URLSessionDataTask,
-            receiveResponse: @escaping HTTPTask.ReceiveResponse,
-            receiveChallenge: @escaping HTTPTask.ReceiveChallenge,
-            consume: @escaping HTTPTask.Consume
-        ) async -> HTTPResult<HTTPResponse> {
-            let task = HTTPTask(
-                request: request,
-                task: sessionTask,
-                receiveResponse: receiveResponse,
-                receiveChallenge: receiveChallenge,
-                consume: consume
-            )
-            $tasks.write { $0.append(task) }
-
-            let result = await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    task.start(with: continuation)
-                }
-            } onCancel: {
-                task.cancel()
-            }
-
-            $tasks.write { $0.removeAll { $0.task == sessionTask } }
-
-            return result
+        init(request: HTTPRequest, clientDelegate: DefaultHTTPClientDelegate?, client: DefaultHTTPClient) {
+            self.request = request
+            self.clientDelegate = clientDelegate
+            self.client = client
         }
 
-        private func findTask(for urlTask: URLSessionTask) -> HTTPTask? {
-            let task = tasks.first { $0.task == urlTask }
-            if task == nil {
-                log(.error, "Cannot find on-going HTTP task for \(urlTask)")
-            }
-            return task
-        }
-
-        // MARK: - URLSessionDataDelegate
-
-        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-            guard let task = findTask(for: dataTask) else {
-                completionHandler(.cancel)
-                return
-            }
-            task.urlSession(session, didReceive: response, completionHandler: completionHandler)
-        }
-
-        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-            findTask(for: dataTask)?.urlSession(session, didReceive: data)
-        }
-
-        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-            findTask(for: task)?.urlSession(session, didCompleteWithError: error)
-        }
-
-        func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-            guard let task = findTask(for: task) else {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            didReceive challenge: URLAuthenticationChallenge,
+            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        ) {
+            guard let client = client else {
                 completionHandler(.performDefaultHandling, nil)
                 return
             }
 
-            task.urlSession(session, didReceive: challenge, completion: completionHandler)
-        }
-    }
-
-    /// Represents an on-going HTTP task.
-    private class HTTPTask: Cancellable, Loggable {
-        typealias Continuation = CheckedContinuation<HTTPResult<HTTPResponse>, Never>
-        typealias ReceiveResponse = (HTTPResponse) -> Void
-        typealias ReceiveChallenge = (URLAuthenticationChallenge) async -> URLAuthenticationChallengeResponse
-        typealias Consume = (Data, Double?) -> HTTPResult<Void>
-
-        private let request: HTTPRequest
-        fileprivate let task: URLSessionTask
-        private let receiveResponse: ReceiveResponse
-        private let receiveChallenge: ReceiveChallenge
-        private let consume: Consume
-
-        /// States the HTTP task can be in.
-        private var state: State = .initializing
-
-        private enum State {
-            /// Waiting to start the task.
-            case initializing
-
-            /// Waiting for the HTTP response.
-            case start(continuation: Continuation)
-
-            /// We received a success response, the data will be sent to
-            /// `consume` progressively.
-            case stream(continuation: Continuation, response: HTTPResponse, readBytes: Int64)
-
-            /// We received an error response, the data will be accumulated in
-            /// `response.body` if the error is an `HTTPError.errorResponse`, as
-            /// it could be needed for example when the response is an OPDS
-            /// Authentication Document.
-            case failure(continuation: Continuation, error: HTTPError)
-
-            /// The request is terminated.
-            case finished
-
-            var continuation: Continuation? {
-                switch self {
-                case .initializing, .finished:
-                    return nil
-                case let .start(continuation):
-                    return continuation
-                case let .stream(continuation, _, _):
-                    return continuation
-                case let .failure(continuation, _):
-                    return continuation
-                }
-            }
-        }
-
-        init(
-            request: HTTPRequest,
-            task: URLSessionDataTask,
-            receiveResponse: @escaping ReceiveResponse,
-            receiveChallenge: @escaping ReceiveChallenge,
-            consume: @escaping Consume
-        ) {
-            self.request = request
-            self.task = task
-            self.receiveResponse = receiveResponse
-            self.receiveChallenge = receiveChallenge
-            self.consume = consume
-        }
-
-        deinit {
-            finish()
-        }
-
-        func start(with continuation: Continuation) {
-            log(.info, request)
-            state = .start(continuation: continuation)
-            task.resume()
-        }
-
-        func cancel() {
-            task.cancel()
-        }
-
-        private func finish() {
-            switch state {
-            case let .start(continuation):
-                continuation.resume(returning: .failure(.cancelled))
-
-            case let .stream(continuation, response, _):
-                continuation.resume(returning: .success(response))
-
-            case let .failure(continuation, error):
-                if case .cancelled = error {
-                    // no-op
-                } else {
-                    var errorDescription = ""
-                    dump(error, to: &errorDescription)
-                    log(.error, "\(request.method) \(request.url) failed with:\n\(errorDescription)")
-                }
-
-                continuation.resume(returning: .failure(error))
-
-            case .initializing, .finished:
-                break
-            }
-
-            state = .finished
-        }
-
-        func urlSession(_ session: URLSession, didReceive urlResponse: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-            if case .finished = state {
-                completionHandler(.cancel)
-                return
-            }
-            guard
-                let continuation = state.continuation,
-                let urlResponse = urlResponse as? HTTPURLResponse,
-                let url = urlResponse.url?.httpURL
-            else {
-                completionHandler(.cancel)
-                return
-            }
-
-            let response = HTTPResponse(request: request, response: urlResponse, url: url)
-
-            guard response.status.isSuccess else {
-                state = .failure(continuation: continuation, error: .errorResponse(response))
-                completionHandler(.allow)
-                return
-            }
-
-            guard !request.hasHeader("Range") || response.acceptsByteRanges else {
-                log(.error, "Streaming ranges requires the remote HTTP server to support byte range requests: \(url)")
-                state = .failure(continuation: continuation, error: .rangeNotSupported)
-                completionHandler(.cancel)
-                return
-            }
-
-            state = .stream(continuation: continuation, response: response, readBytes: 0)
-            receiveResponse(response)
-
-            completionHandler(.allow)
-        }
-
-        func urlSession(_ session: URLSession, didReceive data: Data) {
-            switch state {
-            case .initializing, .start, .finished:
-                break
-
-            case .stream(let continuation, let response, var readBytes):
-                readBytes += Int64(data.count)
-                var progress: Double? = nil
-                if let expectedBytes = response.contentLength {
-                    progress = Double(min(readBytes, expectedBytes)) / Double(expectedBytes)
-                }
-
-                switch consume(data, progress) {
-                case .success:
-                    state = .stream(continuation: continuation, response: response, readBytes: readBytes)
-                case let .failure(error):
-                    state = .failure(continuation: continuation, error: error)
-                }
-
-            case .failure(let continuation, var error):
-                if case var .errorResponse(response) = error {
-                    var body = response.body ?? Data()
-                    body.append(data)
-                    response.body = body
-                    error = .errorResponse(response)
-                }
-
-                state = .failure(continuation: continuation, error: error)
-            }
-        }
-
-        func urlSession(_ session: URLSession, didCompleteWithError error: Error?) {
-            if let error = error {
-                if case .failure = state {
-                    // No-op, we don't want to overwrite the failure state in this case.
-                } else if let continuation = state.continuation {
-                    state = .failure(continuation: continuation, error: .wrap(error) ?? .other(error))
-                } else {
-                    state = .finished
-                }
-            }
-            finish()
-        }
-
-        func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completion: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
             Task {
-                let response = await receiveChallenge(challenge)
-                switch response {
-                case let .useCredential(credential):
-                    completion(.useCredential, credential)
-                case .performDefaultHandling:
-                    completion(.performDefaultHandling, nil)
-                case .cancelAuthenticationChallenge:
-                    completion(.cancelAuthenticationChallenge, nil)
-                case .rejectProtectionSpace:
-                    completion(.rejectProtectionSpace, nil)
+                if let delegate = clientDelegate {
+                    let response = await delegate.httpClient(client, request: request, didReceive: challenge)
+                    switch response {
+                    case let .useCredential(credential):
+                        completionHandler(.useCredential, credential)
+                    case .performDefaultHandling:
+                        completionHandler(.performDefaultHandling, nil)
+                    case .cancelAuthenticationChallenge:
+                        completionHandler(.cancelAuthenticationChallenge, nil)
+                    case .rejectProtectionSpace:
+                        completionHandler(.rejectProtectionSpace, nil)
+                    }
+                } else {
+                    completionHandler(.performDefaultHandling, nil)
                 }
             }
         }
@@ -544,7 +359,7 @@ private extension HTTPRequest {
 }
 
 private extension HTTPResponse {
-    init(request: HTTPRequest, response: HTTPURLResponse, url: HTTPURL, body: Data? = nil) {
+    init(request: HTTPRequest, response: HTTPURLResponse, url: HTTPURL) {
         var headers: [String: String] = [:]
         for (k, v) in response.allHeaderFields {
             if let ks = k as? String, let vs = v as? String {
@@ -556,8 +371,7 @@ private extension HTTPResponse {
             url: url,
             status: HTTPStatus(rawValue: response.statusCode),
             headers: headers,
-            mediaType: response.mimeType.flatMap { MediaType($0) },
-            body: body
+            mediaType: response.mimeType.flatMap { MediaType($0) }
         )
     }
 }
