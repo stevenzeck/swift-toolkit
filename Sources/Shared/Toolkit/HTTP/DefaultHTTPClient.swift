@@ -225,7 +225,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 } catch {
                     log(.warning, "Failed to read error response body: \(error)")
                 }
-                return .failure(.errorResponse(response, body: data))
+                return .failure(.errorResponse(HTTPFetchResponse(response: response, body: data)))
             }
 
             if request.hasHeader("Range"), !response.acceptsByteRanges {

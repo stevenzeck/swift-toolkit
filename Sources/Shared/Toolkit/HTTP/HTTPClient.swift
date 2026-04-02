@@ -28,7 +28,7 @@ public protocol HTTPClient: Loggable {
 
 public extension HTTPClient {
     /// Fetches the resource from the given `request` and returns the response alongside the accumulated data.
-    func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<(HTTPResponse, Data)> {
+    func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<HTTPFetchResponse> {
         var data = Data()
         let responseResult = await stream(
             request: request,
@@ -39,7 +39,7 @@ public extension HTTPClient {
             }
         )
 
-        return responseResult.map { ($0, data) }
+        return responseResult.map { HTTPFetchResponse(response: $0, body: data) }
     }
 
     /// Fetches the resource and attempts to decode it with the given `decoder`.
@@ -50,9 +50,9 @@ public extension HTTPClient {
         decoder: @escaping (HTTPResponse, Data) throws -> T?
     ) async -> HTTPResult<T> {
         await fetch(request)
-            .flatMap { response, body in
+            .flatMap { response in
                 do {
-                    guard let result = try decoder(response, body) else {
+                    guard let result = try decoder(response.response, response.body) else {
                         return .failure(.malformedResponse(nil))
                     }
                     return .success(result)
@@ -289,5 +289,19 @@ public struct HTTPDownload {
         self.location = location
         self.suggestedFilename = suggestedFilename
         self.mediaType = mediaType
+    }
+}
+
+/// HTTP response with the whole body as a Data buffer.
+public struct HTTPFetchResponse {
+    /// The HTTP response from the server.
+    public let response: HTTPResponse
+
+    /// The raw data received in the response body.
+    public let body: Data
+
+    public init(response: HTTPResponse, body: Data) {
+        self.response = response
+        self.body = body
     }
 }

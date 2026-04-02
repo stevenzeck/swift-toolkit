@@ -101,8 +101,8 @@ extension ReadiumShared.HTTPError: UserErrorConvertible {
     func userError() -> UserError {
         UserError(cause: self) {
             switch self {
-            case let .errorResponse(response, _):
-                switch response.status {
+            case let .errorResponse(response):
+                switch response.response.status {
                 case .notFound:
                     return "error_not_found".localized
                 case .unauthorized, .forbidden:
