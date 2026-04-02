@@ -13,11 +13,12 @@ struct HTTPResourceTests {
     private let url = HTTPURL(string: "http://example.com/book.epub")!
 
     class MockHTTPClient: HTTPClient {
-        var fetchResults: [String: HTTPResult<HTTPResponse>] = [:]
+        var fetchResults: [String: HTTPResult<HTTPFetchResponse>] = [:]
         var fetchCount = 0
 
         func stream(
             request: HTTPRequestConvertible,
+            onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
             consume: @escaping (Data, Double?) -> HTTPResult<Void>
         ) async -> HTTPResult<HTTPResponse> {
             let req = try! request.httpRequest().get()
@@ -25,10 +26,16 @@ struct HTTPResourceTests {
             fetchCount += 1
             
             if let result = fetchResults[key] {
-                if case let .success(response) = result, let body = response.body {
-                    _ = consume(body, 1.0)
+                switch result {
+                case let .success(fetchResponse):
+                    if let onReceiveResponse = onReceiveResponse {
+                        let _ = await onReceiveResponse(fetchResponse.response)
+                    }
+                    _ = consume(fetchResponse.body, 1.0)
+                    return .success(fetchResponse.response)
+                case let .failure(error):
+                    return .failure(error)
                 }
-                return result
             }
             return .failure(.cancelled)
         }
@@ -38,13 +45,15 @@ struct HTTPResourceTests {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
         
-        client.fetchResults["HEAD \(url.string)"] = .success(HTTPResponse(
-            request: HTTPRequest(url: url),
-            url: url,
-            status: .ok,
-            headers: ["Content-Length": "1024"],
-            mediaType: .epub,
-            body: nil
+        client.fetchResults["HEAD \(url.string)"] = .success(HTTPFetchResponse(
+            response: HTTPResponse(
+                request: HTTPRequest(url: url),
+                url: url,
+                status: .ok,
+                headers: ["Content-Length": "1024"],
+                mediaType: .epub
+            ),
+            body: Data()
         ))
 
         let length1 = await resource.estimatedLength()
@@ -60,13 +69,15 @@ struct HTTPResourceTests {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
         
-        let response = HTTPResponse(
-            request: HTTPRequest(url: url, method: .head),
-            url: url,
-            status: .methodNotAllowed,
-            headers: [:],
-            mediaType: nil,
-            body: nil
+        let response = HTTPFetchResponse(
+            response: HTTPResponse(
+                request: HTTPRequest(url: url, method: .head),
+                url: url,
+                status: .methodNotAllowed,
+                headers: [:],
+                mediaType: nil
+            ),
+            body: Data()
         )
         client.fetchResults["HEAD \(url.string)"] = .failure(.errorResponse(response))
 
@@ -79,13 +90,15 @@ struct HTTPResourceTests {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
         
-        client.fetchResults["GET \(url.string)"] = .success(HTTPResponse(
-            request: HTTPRequest(url: url),
-            url: url,
-            status: .partialContent,
-            headers: ["Content-Range": "bytes 0-9/100"],
-            mediaType: .epub,
-            body: "0123456789".data(using: .utf8)
+        client.fetchResults["GET \(url.string)"] = .success(HTTPFetchResponse(
+            response: HTTPResponse(
+                request: HTTPRequest(url: url),
+                url: url,
+                status: .partialContent,
+                headers: ["Content-Range": "bytes 0-9/100"],
+                mediaType: .epub
+            ),
+            body: "0123456789".data(using: .utf8)!
         ))
 
         var streamedData = Data()
