@@ -5,8 +5,8 @@
 //
 
 import Foundation
-import Testing
 @testable import ReadiumShared
+import Testing
 
 @Suite("HTTPResponse")
 struct HTTPResponseTests {
