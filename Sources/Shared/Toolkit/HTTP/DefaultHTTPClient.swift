@@ -177,7 +177,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
     public func stream(
         request: any HTTPRequestConvertible,
-        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)? = nil,
+        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)? = nil,
         consume: @escaping (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         await request.httpRequest()
@@ -196,7 +196,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     /// Creates and starts an async byte stream for the `request`.
     private func startTask(
         for request: HTTPRequest,
-        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)?,
+        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
         consume: @escaping (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         var request = request
@@ -234,7 +234,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
             }
 
             if let onReceive = onReceiveResponse {
-                if case let .failure(error) = onReceive(response) {
+                if case let .failure(error) = await onReceive(response) {
                     return .failure(error)
                 }
             }

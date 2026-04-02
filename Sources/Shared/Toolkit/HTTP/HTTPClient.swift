@@ -21,7 +21,7 @@ public protocol HTTPClient: Loggable {
     ///     to abort the request.
     func stream(
         request: HTTPRequestConvertible,
-        onReceiveResponse: ((HTTPResponse) -> HTTPResult<Void>)?,
+        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
         consume: @escaping (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse>
 }
