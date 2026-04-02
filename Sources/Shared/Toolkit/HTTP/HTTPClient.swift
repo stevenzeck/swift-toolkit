@@ -101,7 +101,7 @@ public extension HTTPClient {
 
         let fileHandle: FileHandle
         do {
-            try "".write(to: location.url, atomically: true, encoding: .utf8)
+            try Data().write(to: location.url)
             fileHandle = try FileHandle(forWritingTo: location.url)
         } catch {
             return .failure(.fileSystem(.io(error)))
@@ -251,24 +251,65 @@ public struct HTTPResponse: Equatable {
             .takeIf { $0 >= 0 }
     }
 
+    /// The full expected content length for this resource, when known.
+    ///
+    /// This will be the total length of the resource, even for byte range requests.
+    public var fullContentLength: Int64? {
+        if let contentRange = valueForHeader("Content-Range"),
+           let totalLengthString = contentRange.split(separator: "/").last,
+           let totalLength = Int64(totalLengthString)
+        {
+            return totalLength
+        }
+        return contentLength
+    }
+
+    /// Offset of the current response in the full resource.
+    public var contentRangeOffset: Int64 {
+        guard let contentRange = valueForHeader("Content-Range"),
+              let rangeStartString = contentRange.split(separator: " ").last?.split(separator: "-").first,
+              let rangeStart = Int64(rangeStartString)
+        else {
+            return 0
+        }
+        return rangeStart
+    }
+
     /// The resource filename as provided by the server in the `Content-Disposition` header.
     public var filename: String? {
-        if let disposition = headers["Content-Disposition"] {
-            let array = disposition.split(separator: ";")
-            var filenameString: String?
-            switch array.count {
-            case 1:
-                filenameString = String(array[0]).trimmingCharacters(in: .whitespaces)
-            case 2:
-                filenameString = String(array[1]).trimmingCharacters(in: .whitespaces)
-            default:
-                break
-            }
+        guard let disposition = headers["Content-Disposition"] else {
+            return nil
+        }
 
-            if let filenameString = filenameString, filenameString.starts(with: "filename=") {
-                return filenameString.replacingOccurrences(of: "filename=", with: "")
+        let parts = disposition.split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+
+        // Look for filename* first as it takes precedence
+        for part in parts {
+            if part.hasPrefix("filename*=") {
+                let value = part.replacingOccurrences(of: "filename*=", with: "")
+                let encodingParts = value.split(separator: "'", omittingEmptySubsequences: false)
+                if encodingParts.count == 3 {
+                    let encoding = String(encodingParts[0]).lowercased()
+                    let encodedFilename = String(encodingParts[2])
+                    if encoding == "utf-8" {
+                        return encodedFilename.removingPercentEncoding
+                    }
+                }
             }
         }
+
+        // Fallback to filename
+        for part in parts {
+            if part.hasPrefix("filename=") {
+                var value = part.replacingOccurrences(of: "filename=", with: "")
+                if value.hasPrefix("\"") && value.hasSuffix("\"") {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value
+            }
+        }
+
         return nil
     }
 }
