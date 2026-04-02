@@ -192,7 +192,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                     }
             }
 
-        if case let .failure(error) = result, let request = try? await request.httpRequest() {
+        if case let .failure(error) = result, case let .success(request) = request.httpRequest() {
             delegate?.httpClient(self, request: request, didFailWithError: error)
         }
 
