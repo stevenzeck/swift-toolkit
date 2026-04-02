@@ -303,7 +303,7 @@ public struct HTTPResponse: Equatable {
         for part in parts {
             if part.hasPrefix("filename=") {
                 var value = part.replacingOccurrences(of: "filename=", with: "")
-                if value.hasPrefix("\"") && value.hasSuffix("\"") {
+                if value.hasPrefix("\""), value.hasSuffix("\"") {
                     value = String(value.dropFirst().dropLast())
                 }
                 return value
