@@ -159,7 +159,7 @@ public struct HTTPStatus: Equatable, RawRepresentable, ExpressibleByIntegerLiter
 
     /// Returns whether this represents a successful HTTP status.
     public var isSuccess: Bool {
-        (200 ..< 400).contains(rawValue)
+        (200 ..< 300).contains(rawValue)
     }
 
     /// (200) OK.
