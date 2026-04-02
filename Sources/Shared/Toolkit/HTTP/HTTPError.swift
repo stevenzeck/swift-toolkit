@@ -17,7 +17,7 @@ public enum HTTPError: Error, Loggable {
     case malformedResponse(Error?)
 
     /// The server returned a response with an HTTP status error.
-    case errorResponse(HTTPResponse, body: Data)
+    case errorResponse(HTTPFetchResponse)
 
     /// The client, server or gateways timed out.
     case timeout(Error?)
@@ -51,14 +51,14 @@ public enum HTTPError: Error, Loggable {
     /// Response body parsed as a JSON problem details.
     public func problemDetails() throws -> HTTPProblemDetails? {
         guard
-            case let .errorResponse(response, body) = self,
-            response.mediaType?.matches(.problemDetails) == true,
-            !body.isEmpty
+            case let .errorResponse(response) = self,
+            response.response.mediaType?.matches(.problemDetails) == true,
+            !response.body.isEmpty
         else {
             return nil
         }
 
-        return try HTTPProblemDetails(data: body)
+        return try HTTPProblemDetails(data: response.body)
     }
 
     /// Wraps a native error into an `HTTPError`, if possible.

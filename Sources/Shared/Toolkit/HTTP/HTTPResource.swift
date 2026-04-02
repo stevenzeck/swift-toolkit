@@ -50,10 +50,10 @@ public actor HTTPResource: Resource {
     private func headResponse() async -> ReadResult<HTTPResponse?> {
         if _headResponse == nil {
             _headResponse = await client.fetch(HTTPRequest(url: url, method: .head))
-                .map { $0.0 as HTTPResponse? }
+                .map { $0.response as HTTPResponse? }
                 .flatMapError { error in
                     switch error {
-                    case let .errorResponse(response, _) where response.status == .methodNotAllowed:
+                    case let .errorResponse(response) where response.response.status == .methodNotAllowed:
                         return .success(nil)
                     default:
                         return .failure(.access(.http(error)))
