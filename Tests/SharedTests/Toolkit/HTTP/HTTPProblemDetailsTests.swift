@@ -5,8 +5,8 @@
 //
 
 import Foundation
-import Testing
 @testable import ReadiumShared
+import Testing
 
 @Suite("HTTPProblemDetails")
 struct HTTPProblemDetailsTests {
@@ -60,21 +60,21 @@ struct HTTPProblemDetailsTests {
         let json = """
             {"title": "Forbidden action"}
         """.data(using: .utf8)!
-        
-        let fetchResponse = HTTPFetchResponse(
+
+        let fetchResponse = try HTTPFetchResponse(
             response: HTTPResponse(
-                request: HTTPRequest(url: HTTPURL(string: "http://example.com")!),
-                url: HTTPURL(string: "http://example.com")!,
+                request: HTTPRequest(url: #require(HTTPURL(string: "http://example.com"))),
+                url: #require(HTTPURL(string: "http://example.com")),
                 status: .forbidden,
                 headers: ["Content-Type": "application/problem+json"],
                 mediaType: .problemDetails
             ),
             body: json
         )
-        
+
         let error = HTTPError.errorResponse(fetchResponse)
         let details = try error.problemDetails()
-        
+
         #expect(details?.title == "Forbidden action")
     }
 }

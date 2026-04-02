@@ -5,8 +5,8 @@
 //
 
 import Foundation
-import Testing
 @testable import ReadiumShared
+import Testing
 
 @Suite("HTTPRequest")
 struct HTTPRequestTests {
@@ -14,18 +14,18 @@ struct HTTPRequestTests {
 
     @Test func setRange() {
         var request = HTTPRequest(url: url)
-        
-        request.setRange(0..<100)
+
+        request.setRange(0 ..< 100)
         #expect(request.headers["Range"] == "bytes=0-99")
-        
-        request.setRange(100..<200)
+
+        request.setRange(100 ..< 200)
         #expect(request.headers["Range"] == "bytes=100-199")
     }
-    
+
     @Test func setRangeUntilEnd() {
         var request = HTTPRequest(url: url)
 
-        request.setRange(100..<100) 
+        request.setRange(100 ..< 100)
         #expect(request.headers["Range"] == "bytes=100-")
     }
 
@@ -35,12 +35,12 @@ struct HTTPRequestTests {
             "field1": "value1",
             "field2": "value with spaces",
             "field3": "special&*characters",
-            "field4": nil
+            "field4": nil,
         ])
-        
+
         #expect(request.method == .post)
         #expect(request.headers["Content-Type"] == "application/x-www-form-urlencoded")
-        
+
         if case let .data(data) = request.body, let bodyString = String(data: data, encoding: .utf8) {
             let parts = bodyString.split(separator: "&")
             #expect(parts.contains("field1=value1"))

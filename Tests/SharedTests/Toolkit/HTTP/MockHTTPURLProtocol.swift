@@ -68,7 +68,7 @@ final class MockHTTPURLProtocol: URLProtocol {
     /// Set to `true` by `stopLoading()` so that an in-progress `.delayed`
     /// delivery can abort early rather than blocking until the full interval
     /// elapses.
-    nonisolated(unsafe) private var isStopped = false
+    private nonisolated(unsafe) var isStopped = false
 
     override func startLoading() {
         guard let handler = Self.requestHandler else {

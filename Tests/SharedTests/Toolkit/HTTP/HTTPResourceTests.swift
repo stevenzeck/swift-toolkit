@@ -5,8 +5,8 @@
 //
 
 import Foundation
-import Testing
 @testable import ReadiumShared
+import Testing
 
 @Suite("HTTPResource")
 struct HTTPResourceTests {
@@ -24,7 +24,7 @@ struct HTTPResourceTests {
             let req = try! request.httpRequest().get()
             let key = "\(req.method.rawValue) \(req.url.string)"
             fetchCount += 1
-            
+
             if let result = fetchResults[key] {
                 switch result {
                 case let .success(fetchResponse):
@@ -44,7 +44,7 @@ struct HTTPResourceTests {
     @Test func headResponseIsCached() async throws {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
-        
+
         client.fetchResults["HEAD \(url.string)"] = .success(HTTPFetchResponse(
             response: HTTPResponse(
                 request: HTTPRequest(url: url),
@@ -68,7 +68,7 @@ struct HTTPResourceTests {
     @Test func headResponseFallbackOnMethodNotAllowed() async throws {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
-        
+
         let response = HTTPFetchResponse(
             response: HTTPResponse(
                 request: HTTPRequest(url: url, method: .head),
@@ -89,8 +89,8 @@ struct HTTPResourceTests {
     @Test func streamWithRange() async throws {
         let client = MockHTTPClient()
         let resource = HTTPResource(url: url, client: client)
-        
-        client.fetchResults["GET \(url.string)"] = .success(HTTPFetchResponse(
+
+        client.fetchResults["GET \(url.string)"] = try .success(HTTPFetchResponse(
             response: HTTPResponse(
                 request: HTTPRequest(url: url),
                 url: url,
@@ -98,12 +98,12 @@ struct HTTPResourceTests {
                 headers: ["Content-Range": "bytes 0-9/100"],
                 mediaType: .epub
             ),
-            body: "0123456789".data(using: .utf8)!
+            body: #require("0123456789".data(using: .utf8))
         ))
 
         var streamedData = Data()
-        let result = await resource.stream(range: 0..<10, consume: { streamedData.append($0) })
-        
+        let result = await resource.stream(range: 0 ..< 10, consume: { streamedData.append($0) })
+
         try result.get()
         #expect(streamedData == "0123456789".data(using: .utf8))
     }

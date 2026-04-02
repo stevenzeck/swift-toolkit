@@ -444,7 +444,7 @@ struct DefaultHTTPClientTests {
         }
 
         @Test("Download cleans up temporary file on failure")
-        func downloadCleansUpOnFailure() async throws {
+        func downloadCleansUpOnFailure() async {
             MockHTTPURLProtocol.requestHandler = { _ in
                 .success(statusCode: 500, body: Data("error".utf8))
             }
