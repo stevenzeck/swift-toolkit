@@ -351,8 +351,8 @@ struct DefaultHTTPClientTests {
 
             let response = try await makeClient().fetch(makeURL()).get()
 
-            #expect(response.status == .ok)
-            #expect(response.mediaType == MediaType.text)
+            #expect(response.response.status == .ok)
+            #expect(response.response.mediaType == MediaType.text)
         }
 
         @Test("fetchString returns decoded string")
@@ -520,7 +520,7 @@ struct DefaultHTTPClientTests {
                 Issue.record("Expected .errorResponse for status \(statusCode)")
                 return
             }
-            #expect(response.status.rawValue == statusCode)
+            #expect(response.response.status.rawValue == statusCode)
         }
 
         @Test("Error response body is accumulated")
@@ -543,7 +543,6 @@ struct DefaultHTTPClientTests {
                 Issue.record("Expected .errorResponse")
                 return
             }
-            #expect(response.body != nil)
             #expect(response.body == errorBody)
         }
 
@@ -810,7 +809,7 @@ struct DefaultHTTPClientTests {
             httpRequest.setRange(0 ..< 7)
 
             let response = try await makeClient().fetch(httpRequest).get()
-            #expect(response.status == .partialContent)
+            #expect(response.response.status == .partialContent)
             #expect(response.body == partialContent)
         }
 
@@ -833,7 +832,7 @@ struct DefaultHTTPClientTests {
             httpRequest.setRange(0 ..< 7)
 
             let response = try await makeClient().fetch(httpRequest).get()
-            #expect(response.status == .partialContent)
+            #expect(response.response.status == .partialContent)
             #expect(response.body == partialContent)
         }
 

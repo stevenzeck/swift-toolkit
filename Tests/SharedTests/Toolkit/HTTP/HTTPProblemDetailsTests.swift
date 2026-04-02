@@ -61,16 +61,18 @@ struct HTTPProblemDetailsTests {
             {"title": "Forbidden action"}
         """.data(using: .utf8)!
         
-        let response = HTTPResponse(
-            request: HTTPRequest(url: HTTPURL(string: "http://example.com")!),
-            url: HTTPURL(string: "http://example.com")!,
-            status: .forbidden,
-            headers: ["Content-Type": "application/problem+json"],
-            mediaType: .problemDetails,
+        let fetchResponse = HTTPFetchResponse(
+            response: HTTPResponse(
+                request: HTTPRequest(url: HTTPURL(string: "http://example.com")!),
+                url: HTTPURL(string: "http://example.com")!,
+                status: .forbidden,
+                headers: ["Content-Type": "application/problem+json"],
+                mediaType: .problemDetails
+            ),
             body: json
         )
         
-        let error = HTTPError.errorResponse(response)
+        let error = HTTPError.errorResponse(fetchResponse)
         let details = try error.problemDetails()
         
         #expect(details?.title == "Forbidden action")
