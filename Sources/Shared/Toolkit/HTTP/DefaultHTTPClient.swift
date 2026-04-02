@@ -180,7 +180,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)? = nil,
         consume: @escaping (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
-        await request.httpRequest()
+        let result = await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
                 await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
@@ -191,6 +191,12 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                             }
                     }
             }
+
+        if case let .failure(error) = result, let request = try? await request.httpRequest() {
+            delegate?.httpClient(self, request: request, didFailWithError: error)
+        }
+
+        return result
     }
 
     /// Creates and starts an async byte stream for the `request`.
@@ -204,72 +210,24 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
             request.userAgent = userAgent
         }
 
-        let taskDelegate = TaskDelegate(request: request, clientDelegate: delegate, client: self)
+        let taskDelegate = TaskDelegate(
+            request: request,
+            clientDelegate: delegate,
+            client: self,
+            onReceiveResponse: onReceiveResponse,
+            consume: consume
+        )
 
-        do {
-            let (asyncBytes, urlResponse) = try await session.bytes(for: request.urlRequest, delegate: taskDelegate)
+        let task = session.dataTask(with: request.urlRequest)
+        task.delegate = taskDelegate
 
-            guard let httpURLResponse = urlResponse as? HTTPURLResponse, let url = httpURLResponse.url?.httpURL else {
-                return .failure(.malformedResponse(nil))
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                taskDelegate.responseContinuation = continuation
+                task.resume()
             }
-
-            let response = HTTPResponse(request: request, response: httpURLResponse, url: url)
-            delegate?.httpClient(self, request: request, didReceiveResponse: response)
-
-            guard response.status.isSuccess else {
-                var data = Data()
-                do {
-                    for try await byte in asyncBytes {
-                        data.append(byte)
-                    }
-                } catch {
-                    log(.warning, "Failed to read error response body: \(error)")
-                }
-                return .failure(.errorResponse(HTTPFetchResponse(response: response, body: data)))
-            }
-
-            if request.hasHeader("Range"), !response.acceptsByteRanges {
-                log(.error, "Streaming ranges requires the remote HTTP server to support byte range requests: \(url)")
-                return .failure(.rangeNotSupported)
-            }
-
-            if let onReceive = onReceiveResponse {
-                if case let .failure(error) = await onReceive(response) {
-                    return .failure(error)
-                }
-            }
-
-            var readBytes: Int64 = 0
-            let expectedBytes = response.contentLength
-            var buffer = Data()
-            buffer.reserveCapacity(8192)
-
-            for try await byte in asyncBytes {
-                buffer.append(byte)
-                if buffer.count >= 8192 {
-                    readBytes += Int64(buffer.count)
-                    let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
-                    if case let .failure(error) = consume(buffer, progress) {
-                        return .failure(error)
-                    }
-                    buffer.removeAll(keepingCapacity: true)
-                }
-            }
-
-            if !buffer.isEmpty {
-                readBytes += Int64(buffer.count)
-                let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
-                if case let .failure(error) = consume(buffer, progress) {
-                    return .failure(error)
-                }
-            }
-
-            return .success(response)
-
-        } catch {
-            let httpError: HTTPError = (error is CancellationError) ? .cancelled : (.wrap(error) ?? .other(error))
-            delegate?.httpClient(self, request: request, didFailWithError: httpError)
-            return .failure(httpError)
+        } onCancel: {
+            task.cancel()
         }
     }
 
@@ -292,15 +250,123 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     }
 
     /// Isolated proxy to pass challenges back to the `DefaultHTTPClientDelegate`.
-    private final class TaskDelegate: NSObject, URLSessionTaskDelegate {
+    private final class TaskDelegate: NSObject, URLSessionDataDelegate {
         let request: HTTPRequest
         weak var clientDelegate: DefaultHTTPClientDelegate?
         weak var client: DefaultHTTPClient?
+        var authTask: Task<Void, Never>?
 
-        init(request: HTTPRequest, clientDelegate: DefaultHTTPClientDelegate?, client: DefaultHTTPClient) {
+        var onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?
+        var consume: ((Data, Double?) -> HTTPResult<Void>)?
+        var responseContinuation: CheckedContinuation<HTTPResult<HTTPResponse>, Never>?
+
+        var httpResponse: HTTPResponse?
+        var readBytes: Int64 = 0
+        var expectedBytes: Int64?
+        var errorData = Data()
+        var consumeError: HTTPError?
+
+        init(
+            request: HTTPRequest,
+            clientDelegate: DefaultHTTPClientDelegate?,
+            client: DefaultHTTPClient,
+            onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
+            consume: @escaping (Data, Double?) -> HTTPResult<Void>
+        ) {
             self.request = request
             self.clientDelegate = clientDelegate
             self.client = client
+            self.onReceiveResponse = onReceiveResponse
+            self.consume = consume
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            authTask?.cancel()
+            
+            if let consumeError = consumeError {
+                responseContinuation?.resume(returning: .failure(consumeError))
+            } else if let error = error {
+                let isCancelled = (error is CancellationError) || ((error as? URLError)?.code == .cancelled)
+                let httpError: HTTPError = isCancelled ? .cancelled : (.wrap(error) ?? .other(error))
+                responseContinuation?.resume(returning: .failure(httpError))
+            } else if let httpResponse = httpResponse {
+                if !httpResponse.status.isSuccess {
+                    responseContinuation?.resume(returning: .failure(.errorResponse(HTTPFetchResponse(response: httpResponse, body: errorData))))
+                } else {
+                    responseContinuation?.resume(returning: .success(httpResponse))
+                }
+            } else {
+                responseContinuation?.resume(returning: .failure(.other(URLError(.unknown))))
+            }
+            responseContinuation = nil
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            dataTask: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            guard let httpURLResponse = response as? HTTPURLResponse, let url = httpURLResponse.url?.httpURL else {
+                responseContinuation?.resume(returning: .failure(.malformedResponse(nil)))
+                responseContinuation = nil
+                completionHandler(.cancel)
+                return
+            }
+
+            let httpResponse = HTTPResponse(request: request, response: httpURLResponse, url: url)
+            self.httpResponse = httpResponse
+            client?.delegate?.httpClient(client!, request: request, didReceiveResponse: httpResponse)
+
+            guard httpResponse.status.isSuccess else {
+                completionHandler(.allow)
+                return
+            }
+
+            if request.hasHeader("Range"), !httpResponse.acceptsByteRanges {
+                log(.error, "Streaming ranges requires the remote HTTP server to support byte range requests: \(url)")
+                responseContinuation?.resume(returning: .failure(.rangeNotSupported))
+                responseContinuation = nil
+                completionHandler(.cancel)
+                return
+            }
+
+            readBytes = httpResponse.contentRangeOffset
+            expectedBytes = httpResponse.fullContentLength
+
+            if let onReceive = onReceiveResponse {
+                Task {
+                    let result = await onReceive(httpResponse)
+                    if case let .failure(error) = result {
+                        self.responseContinuation?.resume(returning: .failure(error))
+                        self.responseContinuation = nil
+                        completionHandler(.cancel)
+                    } else {
+                        completionHandler(.allow)
+                    }
+                }
+            } else {
+                completionHandler(.allow)
+            }
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            if let httpResponse = httpResponse, !httpResponse.status.isSuccess {
+                if errorData.count < 1024 * 1024 {
+                    errorData.append(data)
+                }
+                return
+            }
+
+            readBytes += Int64(data.count)
+            let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
+            
+            if let consume = consume {
+                if case let .failure(error) = consume(data, progress) {
+                    self.consumeError = error
+                    dataTask.cancel()
+                }
+            }
         }
 
         func urlSession(
@@ -314,9 +380,20 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 return
             }
 
-            Task {
+            authTask = Task {
+                if Task.isCancelled {
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    return
+                }
+
                 if let delegate = clientDelegate {
                     let response = await delegate.httpClient(client, request: request, didReceive: challenge)
+
+                    if Task.isCancelled {
+                        completionHandler(.cancelAuthenticationChallenge, nil)
+                        return
+                    }
+
                     switch response {
                     case let .useCredential(credential):
                         completionHandler(.useCredential, credential)
