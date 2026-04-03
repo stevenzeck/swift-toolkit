@@ -5,7 +5,9 @@
 //
 
 import Foundation
-import UIKit
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// An HTTP client performs HTTP requests.
 ///
@@ -19,10 +21,12 @@ public protocol HTTPClient: Loggable {
     ///   - consume: Callback called for each chunk of data received. Callers
     ///     are responsible to accumulate the data if needed. Return an error
     ///     to abort the request.
+    ///     The `progress` parameter represents the overall resource progress (including
+    ///     any `contentRangeOffset` for range requests), not just the progress of the current chunk.
     func stream(
         request: HTTPRequestConvertible,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
-        consume: (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
+        consume: @Sendable (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse>
 }
 
@@ -78,12 +82,14 @@ public extension HTTPClient {
         }
     }
 
-    /// Fetches the resource as an `UIImage`.
-    func fetchImage(_ request: HTTPRequestConvertible) async -> HTTPResult<UIImage> {
-        await fetch(request) {
-            UIImage(data: $1)
+    #if canImport(UIKit)
+        /// Fetches the resource as an `UIImage`.
+        func fetchImage(_ request: HTTPRequestConvertible) async -> HTTPResult<UIImage> {
+            await fetch(request) {
+                UIImage(data: $1)
+            }
         }
-    }
+    #endif
 
     /// Downloads the resource at a temporary location.
     ///
@@ -106,6 +112,7 @@ public extension HTTPClient {
         } catch {
             return .failure(.fileSystem(.io(error)))
         }
+        defer { try? fileHandle.close() }
 
         let result = await stream(
             request: request,
@@ -256,7 +263,7 @@ public struct HTTPResponse: Equatable {
     /// This will be the total length of the resource, even for byte range requests.
     public var fullContentLength: Int64? {
         if let contentRange = valueForHeader("Content-Range"),
-           let totalLengthString = contentRange.split(separator: "/").last,
+           let totalLengthString = contentRange.split(separator: "/").last?.trimmingCharacters(in: .whitespaces),
            let totalLength = Int64(totalLengthString)
         {
             return totalLength
@@ -267,7 +274,8 @@ public struct HTTPResponse: Equatable {
     /// Offset of the current response in the full resource.
     public var contentRangeOffset: Int64 {
         guard let contentRange = valueForHeader("Content-Range"),
-              let rangeStartString = contentRange.split(separator: " ").last?.split(separator: "-").first,
+              let rangeString = contentRange.split(separator: " ", maxSplits: 1).last,
+              let rangeStartString = rangeString.split(separator: "-").first?.trimmingCharacters(in: .whitespaces),
               let rangeStart = Int64(rangeStartString)
         else {
             return 0

@@ -933,6 +933,7 @@ struct DefaultHTTPClientTests {
                 Issue.record("Expected .cancelled from willStartRequest failure, got \(result)")
                 return
             }
+            #expect(!delegate.didFailWithErrorCalled)
         }
 
         @Test("didReceiveResponse is called on success")
@@ -1204,7 +1205,7 @@ struct DefaultHTTPClientTests {
 
 /// A test spy implementing `DefaultHTTPClientDelegate` that records calls
 /// and allows customizing behavior via closures.
-private class SpyDelegate: DefaultHTTPClientDelegate {
+private class SpyDelegate: DefaultHTTPClientDelegate, @unchecked Sendable {
     var willStartRequestCalled = false
     var didReceiveResponseCalled = false
     var didFailWithErrorCalled = false

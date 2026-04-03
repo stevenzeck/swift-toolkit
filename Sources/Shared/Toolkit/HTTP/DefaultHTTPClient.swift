@@ -25,6 +25,9 @@ public protocol DefaultHTTPClientDelegate: AnyObject {
     ///
     /// You can modify the `request`, for example by adding additional HTTP headers or redirecting to a different URL,
     /// before returning the new request.
+    ///
+    /// - Note: If this method returns a failure, the request is aborted immediately and `httpClient(_:request:didFailWithError:)`
+    /// is NOT called.
     func httpClient(_ httpClient: DefaultHTTPClient, willStartRequest request: HTTPRequest) async -> HTTPResult<HTTPRequestConvertible>
 
     /// Asks the delegate to recover from an `error` received for the given `request`.
@@ -50,7 +53,7 @@ public protocol DefaultHTTPClientDelegate: AnyObject {
     /// informational purposes.
     ///
     /// This will be called only if `httpClient(_:recoverRequest:fromError:)` is not implemented, or returns
-    /// an error.
+    /// an error. It is also NOT called if `httpClient(_:willStartRequest:)` fails and aborts the request.
     func httpClient(_ httpClient: DefaultHTTPClient, request: HTTPRequest, didFailWithError error: HTTPError)
 
     /// Requests credentials from the delegate in response to an authentication request from the remote server.
@@ -178,21 +181,36 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     public func stream(
         request: any HTTPRequestConvertible,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)? = nil,
-        consume: (Data, Double?) -> HTTPResult<Void>
+        consume: @Sendable (Data, Double?) -> HTTPResult<Void>
+    ) async -> HTTPResult<HTTPResponse> {
+        await stream(
+            request: request,
+            allowRecovery: true,
+            onReceiveResponse: onReceiveResponse,
+            consume: consume
+        )
+    }
+
+    private func stream(
+        request: any HTTPRequestConvertible,
+        allowRecovery: Bool,
+        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
+        consume: @Sendable (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         let result = await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
                 await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
                     .asyncRecover { error in
-                        await recover(request, from: error)
+                        guard allowRecovery else { return .failure(error) }
+                        return await recover(request, from: error)
                             .asyncFlatMap { newRequest in
-                                await stream(request: newRequest, onReceiveResponse: onReceiveResponse, consume: consume)
+                                await stream(request: newRequest, allowRecovery: false, onReceiveResponse: onReceiveResponse, consume: consume)
                             }
                     }
             }
 
-        if case let .failure(error) = result, case let .success(request) = request.httpRequest() {
+        if allowRecovery, case let .failure(error) = result, case let .success(request) = request.httpRequest() {
             delegate?.httpClient(self, request: request, didFailWithError: error)
         }
 
@@ -203,7 +221,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     private func startTask(
         for request: HTTPRequest,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
-        consume: (Data, Double?) -> HTTPResult<Void>
+        consume: @Sendable (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         var request = request
         if request.userAgent == nil {
@@ -228,19 +246,16 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
             if !httpResponse.status.isSuccess {
                 let capacity = min(1024 * 1024, Int(httpResponse.fullContentLength ?? 1024))
-                let errorBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
-                defer { errorBuffer.deallocate() }
+                var errorData = Data(capacity: capacity)
 
-                var errorCount = 0
                 for try await byte in bytes {
-                    if errorCount < capacity {
-                        errorBuffer[errorCount] = byte
-                        errorCount += 1
+                    if errorData.count < capacity {
+                        errorData.append(byte)
                     } else {
                         break
                     }
                 }
-                return .failure(.errorResponse(HTTPFetchResponse(response: httpResponse, body: Data(bytes: errorBuffer, count: errorCount))))
+                return .failure(.errorResponse(HTTPFetchResponse(response: httpResponse, body: errorData)))
             }
 
             if request.hasHeader("Range"), !httpResponse.acceptsByteRanges {
@@ -315,7 +330,8 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     }
 
     /// Isolated proxy to pass challenges back to the `DefaultHTTPClientDelegate`.
-    private final class TaskDelegate: NSObject, URLSessionTaskDelegate {
+    /// URLSession guarantees its delegate callbacks are serialized, so the mutable `authTask` is safe.
+    private final class TaskDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         let request: HTTPRequest
         weak var clientDelegate: DefaultHTTPClientDelegate?
         weak var client: DefaultHTTPClient?
