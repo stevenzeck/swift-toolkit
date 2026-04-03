@@ -178,7 +178,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     public func stream(
         request: any HTTPRequestConvertible,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)? = nil,
-        consume: @escaping (Data, Double?) -> HTTPResult<Void>
+        consume: (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         let result = await request.httpRequest()
             .asyncFlatMap(willStartRequest)
@@ -203,7 +203,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
     private func startTask(
         for request: HTTPRequest,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
-        consume: @escaping (Data, Double?) -> HTTPResult<Void>
+        consume: (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
         var request = request
         if request.userAgent == nil {
