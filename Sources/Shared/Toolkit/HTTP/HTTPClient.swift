@@ -22,7 +22,7 @@ public protocol HTTPClient: Loggable {
     func stream(
         request: HTTPRequestConvertible,
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
-        consume: @escaping (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
+        consume: (_ chunk: Data, _ progress: Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse>
 }
 
