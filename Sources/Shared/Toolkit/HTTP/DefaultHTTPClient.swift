@@ -183,37 +183,33 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)? = nil,
         consume: @Sendable (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
-        await stream(
-            request: request,
-            allowRecovery: true,
-            onReceiveResponse: onReceiveResponse,
-            consume: consume
-        )
-    }
-
-    private func stream(
-        request: any HTTPRequestConvertible,
-        allowRecovery: Bool,
-        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
-        consume: @Sendable (Data, Double?) -> HTTPResult<Void>
-    ) async -> HTTPResult<HTTPResponse> {
         await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
                 let result = await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
                     .asyncRecover { error in
-                        guard allowRecovery else { return .failure(error) }
-                        return await recover(request, from: error)
+                        await recover(request, from: error)
                             .asyncFlatMap { newRequest in
-                                await stream(request: newRequest, allowRecovery: false, onReceiveResponse: onReceiveResponse, consume: consume)
+                                await streamOnce(request: newRequest, onReceiveResponse: onReceiveResponse, consume: consume)
                             }
                     }
 
-                if allowRecovery, case let .failure(error) = result {
+                if case let .failure(error) = result {
                     delegate?.httpClient(self, request: request, didFailWithError: error)
                 }
 
                 return result
+            }
+    }
+
+    private func streamOnce(
+        request: any HTTPRequestConvertible,
+        onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
+        consume: @Sendable (Data, Double?) -> HTTPResult<Void>
+    ) async -> HTTPResult<HTTPResponse> {
+        await request.httpRequest()
+            .asyncFlatMap { request in
+                await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
             }
     }
 
@@ -284,7 +280,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 if count == capacity {
                     let chunk = Data(bytes: buffer, count: count)
                     readBytes += Int64(count)
-                    let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
+                    let progress = expectedBytes.map { $0 > 0 ? Double(min(readBytes, $0)) / Double($0) : 1.0 }
                     if case let .failure(error) = consume(chunk, progress) {
                         return .failure(error)
                     }
@@ -295,7 +291,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
             if count > 0 {
                 let chunk = Data(bytes: buffer, count: count)
                 readBytes += Int64(count)
-                let progress = expectedBytes.map { Double(min(readBytes, $0)) / Double($0) }
+                let progress = expectedBytes.map { $0 > 0 ? Double(min(readBytes, $0)) / Double($0) : 1.0 }
                 if case let .failure(error) = consume(chunk, progress) {
                     return .failure(error)
                 }
@@ -362,6 +358,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 return
             }
 
+            authTask?.cancel()
             authTask = Task {
                 if Task.isCancelled {
                     completionHandler(.cancelAuthenticationChallenge, nil)
