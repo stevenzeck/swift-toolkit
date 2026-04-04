@@ -9,6 +9,11 @@ import Foundation
     import UIKit
 #endif
 
+private final class HTTPDataAccumulator: @unchecked Sendable {
+    var data = Data()
+    init() {}
+}
+
 /// An HTTP client performs HTTP requests.
 ///
 /// You may provide a custom implementation, or use the `DefaultHTTPClient` one which relies on native APIs.
@@ -33,17 +38,17 @@ public protocol HTTPClient: Loggable {
 public extension HTTPClient {
     /// Fetches the resource from the given `request` and returns the response alongside the accumulated data.
     func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<HTTPFetchResponse> {
-        var data = Data()
+        let accumulator = HTTPDataAccumulator()
         let responseResult = await stream(
             request: request,
             onReceiveResponse: nil,
             consume: { chunk, _ in
-                data.append(chunk)
+                accumulator.data.append(chunk)
                 return .success(())
             }
         )
 
-        return responseResult.map { HTTPFetchResponse(response: $0, body: data) }
+        return responseResult.map { HTTPFetchResponse(response: $0, body: accumulator.data) }
     }
 
     /// Fetches the resource and attempts to decode it with the given `decoder`.

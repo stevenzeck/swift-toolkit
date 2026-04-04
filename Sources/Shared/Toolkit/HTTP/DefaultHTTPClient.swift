@@ -197,10 +197,10 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
         consume: @Sendable (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
-        let result = await request.httpRequest()
+        return await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
-                await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
+                let result = await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
                     .asyncRecover { error in
                         guard allowRecovery else { return .failure(error) }
                         return await recover(request, from: error)
@@ -208,13 +208,13 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                                 await stream(request: newRequest, allowRecovery: false, onReceiveResponse: onReceiveResponse, consume: consume)
                             }
                     }
+
+                if allowRecovery, case let .failure(error) = result {
+                    delegate?.httpClient(self, request: request, didFailWithError: error)
+                }
+
+                return result
             }
-
-        if allowRecovery, case let .failure(error) = result, case let .success(request) = request.httpRequest() {
-            delegate?.httpClient(self, request: request, didFailWithError: error)
-        }
-
-        return result
     }
 
     /// Creates and starts an async byte stream for the `request`.

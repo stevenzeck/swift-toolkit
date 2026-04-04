@@ -8,6 +8,11 @@ import Foundation
 @testable import ReadiumShared
 import Testing
 
+private final class Box<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
+
 @Suite(.serialized)
 struct DefaultHTTPClientTests {
     /// Creates a `DefaultHTTPClient` configured with `MockHTTPURLProtocol`
@@ -210,19 +215,19 @@ struct DefaultHTTPClientTests {
                 .success(chunks: [chunk1, chunk2])
             }
 
-            var receivedChunks: [Data] = []
+            let receivedChunks = Box<[Data]>([])
 
             let result = await makeClient().stream(
                 request: makeURL()
             ) { data, _ in
-                receivedChunks.append(data)
+                receivedChunks.value.append(data)
                 return .success(())
             }
 
             let response = try result.get()
             #expect(response.status == .ok)
             // URLSession may coalesce chunks, so verify total data
-            let totalData = receivedChunks.reduce(Data(), +)
+            let totalData = receivedChunks.value.reduce(Data(), +)
             #expect(totalData == chunk1 + chunk2)
         }
 
@@ -237,21 +242,21 @@ struct DefaultHTTPClientTests {
                 )
             }
 
-            var lastProgress: Double?
+            let lastProgress = Box<Double?>(nil)
 
             let result = await makeClient().stream(
                 request: makeURL()
             ) { _, progress in
                 if let progress = progress {
-                    lastProgress = progress
+                    lastProgress.value = progress
                 }
                 return .success(())
             }
 
             _ = try result.get()
-            #expect(lastProgress != nil)
+            #expect(lastProgress.value != nil)
             // Final progress should be 1.0 (all data received)
-            if let progress = lastProgress {
+            if let progress = lastProgress.value {
                 #expect(progress > 0)
                 #expect(progress <= 1.0)
             }
@@ -263,18 +268,18 @@ struct DefaultHTTPClientTests {
                 .success(body: Data("data".utf8))
             }
 
-            var allProgressValues: [Double?] = []
+            let allProgressValues = Box<[Double?]>([])
 
             let result = await makeClient().stream(
                 request: makeURL()
             ) { _, progress in
-                allProgressValues.append(progress)
+                allProgressValues.value.append(progress)
                 return .success(())
             }
 
             _ = try result.get()
             // All progress values should be nil since no Content-Length
-            #expect(allProgressValues.allSatisfy { $0 == nil })
+            #expect(allProgressValues.value.allSatisfy { $0 == nil })
         }
 
         @Test("Returning failure from consume aborts the stream")
