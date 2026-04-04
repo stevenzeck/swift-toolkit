@@ -10,7 +10,9 @@ import Testing
 
 private final class Box<T>: @unchecked Sendable {
     var value: T
-    init(_ value: T) { self.value = value }
+    init(_ value: T) {
+        self.value = value
+    }
 }
 
 @Suite(.serialized)

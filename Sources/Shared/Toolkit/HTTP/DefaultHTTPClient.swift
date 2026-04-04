@@ -197,7 +197,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         onReceiveResponse: ((HTTPResponse) async -> HTTPResult<Void>)?,
         consume: @Sendable (Data, Double?) -> HTTPResult<Void>
     ) async -> HTTPResult<HTTPResponse> {
-        return await request.httpRequest()
+        await request.httpRequest()
             .asyncFlatMap(willStartRequest)
             .asyncFlatMap { request in
                 let result = await startTask(for: request, onReceiveResponse: onReceiveResponse, consume: consume)
