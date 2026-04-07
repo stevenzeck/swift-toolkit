@@ -7,8 +7,6 @@
 import Foundation
 import ReadiumInternal
 import ReadiumShared
-import SwiftSoup
-import UIKit
 
 struct ReadiumCSS {
     var layout: CSSLayout = .init()
@@ -111,14 +109,12 @@ extension ReadiumCSS: HTMLInjectable {
 
     /// https://github.com/readium/readium-css/blob/develop/docs/CSS06-stylesheets_order.md
     func injections(for html: String) throws -> [HTMLInjection] {
-        let document = try parse(html)
-
         var inj: [HTMLInjection] = []
         inj.append(.meta(name: "viewport", content: "width=device-width, height=device-height, initial-scale=1.0"))
         inj.append(contentsOf: styleInjections(for: html))
         inj.append(cssPropertiesInjection())
         inj.append(contentsOf: dirInjection())
-        try inj.append(contentsOf: langInjections(for: document))
+        inj.append(contentsOf: langInjections(for: html))
         return inj
     }
 
@@ -186,19 +182,21 @@ extension ReadiumCSS: HTMLInjectable {
     /// Injects the `xml:lang` attribute in `html` and `body`.
     ///
     /// https://github.com/readium/readium-css/blob/develop/docs/CSS16-internationalization.md#language
-    private func langInjections(for document: Document) throws -> [HTMLInjection] {
+    private func langInjections(for html: String) -> [HTMLInjection] {
+        let langAttrs = ["xml:lang", "lang"]
         guard
             let language = layout.language,
-            let html = try document.getElementsByTag("html").first(),
-            !html.hasLang(),
-            let body = document.body()
+            !HTMLElement.html.hasAttribute(anyOf: langAttrs, in: html)
         else {
             return []
         }
 
-        if body.hasLang() {
+        if
+            let bodyLang = HTMLElement.body.attribute(firstOf: langAttrs, in: html),
+            !bodyLang.isEmpty
+        {
             return [
-                .langAttribute(on: .html, language: body.lang() ?? language),
+                .langAttribute(on: .html, language: Language(code: .bcp47(bodyLang))),
             ]
         } else {
             return [
@@ -206,19 +204,6 @@ extension ReadiumCSS: HTMLInjectable {
                 .langAttribute(on: .body, language: language),
             ]
         }
-    }
-}
-
-private extension Element {
-    func hasLang() -> Bool {
-        hasAttr("xml:lang") || hasAttr("lang")
-    }
-
-    func lang() -> Language? {
-        let code = (try? attr("xml:lang")).takeIf { !$0.isEmpty }
-            ?? (try? attr("lang")).takeIf { !$0.isEmpty }
-
-        return code.map { Language(code: .bcp47($0)) }
     }
 }
 

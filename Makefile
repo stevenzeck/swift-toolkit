@@ -3,7 +3,7 @@ CSS_PATH := Sources/Navigator/EPUB/Assets/Static/readium-css
 
 help:
 	@echo "Usage: make <target>\n\n\
-	  carthage-project\tGenerate the Carthage Xcode project\n\
+	  playground\t\tGenerate the Playground project\n\
 	  podspecs\t\tGenerate the CocoaPods podspecs\n\
 	  scripts\t\tBundle the Navigator EPUB scripts\n\
 	  test\t\t\tRun unit tests\n\
@@ -12,15 +12,20 @@ help:
 	  update-locales\tUpdate the localization files\n\
 	"
 
+.SILENT:
+.PHONY: playground
+playground:
+	cd Playground; \
+	find . -name ".DS_Store" -delete; \
+	xcodegen --use-cache --cache-path .xcodegen; \
+	# The repository might be cloned to a different location than "swift-toolkit".
+	# XcodeGen will use the name of the folder in the project, which is not desirable.
+	# This will replace all occurrences of this folder by "swift-toolkit".
+	perl -i -0777 -pe 'if (/name = (\S+); path = \.\.; /) { my $$n = $$1; s/name = \Q$$n\E; path = \.\./name = swift-toolkit; path = ../; s|/\* \Q$$n\E \*/|/* swift-toolkit */|g; }' Playground/Playground.xcodeproj/project.pbxproj
+
 .PHONY: podspecs
 podspecs:
 	swift run --package-path BuildTools GeneratePodspecs
-
-.PHONY: carthage-project
-carthage-project:
-	rm -rf **/.DS_Store
-	rm -rf $(SCRIPTS_PATH)/node_modules/
-	xcodegen -s Support/Carthage/project.yml --use-cache --cache-path Support/Carthage/.xcodegen
 
 .PHONY: navigator-ui-tests-project
 navigator-ui-tests-project:
