@@ -19,6 +19,8 @@ class AudioLocatorServiceTests: XCTestCase {
         let locator = Locator(href: "l1", mediaType: .mp3, locations: .init(totalProgression: 0.53))
         let result = await service.locate(locator)
         XCTAssertEqual(result, locator)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testLocateLocatorReturnsNilIfNoMatch() async {
@@ -30,6 +32,8 @@ class AudioLocatorServiceTests: XCTestCase {
         let locator = Locator(href: "l3", mediaType: .mp3, locations: .init(totalProgression: 0.53))
         let result = await service.locate(locator)
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testLocateLocatorUsesTotalProgression() async {
@@ -67,6 +71,8 @@ class AudioLocatorServiceTests: XCTestCase {
                 totalProgression: 0.51
             ))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testLocateLocatorUsingTotalProgressionKeepsTitleAndText() async throws {
@@ -105,6 +111,8 @@ class AudioLocatorServiceTests: XCTestCase {
                 text: .init(after: "after", before: "before", highlight: "highlight")
             )
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testLocateProgression() async {
@@ -162,6 +170,8 @@ class AudioLocatorServiceTests: XCTestCase {
                 totalProgression: 1
             ))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testLocateInvalidProgression() async {
@@ -175,6 +185,8 @@ class AudioLocatorServiceTests: XCTestCase {
 
         result = await service.locate(progression: 1.5)
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     private func makeService(readingOrder: [Link]) -> (Publication, AudioLocatorService) {

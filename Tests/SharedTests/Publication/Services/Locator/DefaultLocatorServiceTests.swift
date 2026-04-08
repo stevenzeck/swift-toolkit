@@ -18,12 +18,16 @@ class DefaultLocatorServiceTests: XCTestCase {
         let locator = Locator(href: "chap2", mediaType: .html, text: .init(highlight: "Highlight"))
         let result = await service.locate(locator)
         XCTAssertEqual(result, locator)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromLocatorEmptyReadingOrder() async {
         let (publication, service) = makeService(readingOrder: [])
         let result = await service.locate(Locator(href: "href", mediaType: .html))
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromLocatorNotFound() async {
@@ -34,6 +38,8 @@ class DefaultLocatorServiceTests: XCTestCase {
         let locator = Locator(href: "chap2", mediaType: .html, text: .init(highlight: "Highlight"))
         let result = await service.locate(locator)
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromProgression() async {
@@ -108,6 +114,8 @@ class DefaultLocatorServiceTests: XCTestCase {
                 position: 8
             )
         ))
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromIncorrectProgression() async {
@@ -118,12 +126,16 @@ class DefaultLocatorServiceTests: XCTestCase {
 
         result = await service.locate(progression: 1.2)
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromProgressionEmptyPositions() async {
         let (publication, service) = makeService(positions: [])
         let result = await service.locate(progression: 0.5)
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromMinimalLink() async {
@@ -136,6 +148,8 @@ class DefaultLocatorServiceTests: XCTestCase {
             result,
             Locator(href: "/href", mediaType: .html, title: "Resource", locations: Locator.Locations(progression: 0.0))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromLinkInReadingOrderResourcesOrLinks() async {
@@ -162,6 +176,8 @@ class DefaultLocatorServiceTests: XCTestCase {
             result,
             Locator(href: "/href3", mediaType: .html, locations: Locator.Locations(progression: 0.0))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromLinkWithFragment() async throws {
@@ -174,6 +190,8 @@ class DefaultLocatorServiceTests: XCTestCase {
             result,
             Locator(href: "/href", mediaType: .html, title: "Resource", locations: Locator.Locations(fragments: ["page=42"]))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testTitleFallbackFromLink() async {
@@ -186,6 +204,8 @@ class DefaultLocatorServiceTests: XCTestCase {
             result,
             Locator(href: "/href", mediaType: .html, title: "My link", locations: Locator.Locations(progression: 0.0))
         )
+
+        withExtendedLifetime(publication) {}
     }
 
     func testFromLinkNotFound() async {
@@ -195,6 +215,8 @@ class DefaultLocatorServiceTests: XCTestCase {
 
         let result = await service.locate(Link(href: "notfound"))
         XCTAssertNil(result)
+
+        withExtendedLifetime(publication) {}
     }
 
     func makeService(
