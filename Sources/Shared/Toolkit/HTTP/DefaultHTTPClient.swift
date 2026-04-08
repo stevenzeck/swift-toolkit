@@ -231,7 +231,17 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
         )
 
         do {
-            let (bytes, response) = try await session.bytes(for: request.urlRequest, delegate: taskDelegate)
+            let task = session.dataTask(with: request.urlRequest)
+            task.delegate = taskDelegate
+
+            let (stream, response) = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(AsyncThrowingStream<Data, Error>, URLResponse), Error>) in
+                    taskDelegate.responseContinuation = continuation
+                    task.resume()
+                }
+            } onCancel: {
+                task.cancel()
+            }
 
             guard let httpURLResponse = response as? HTTPURLResponse, let url = httpURLResponse.url?.httpURL else {
                 return .failure(.malformedResponse(nil))
@@ -242,15 +252,16 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
             if !httpResponse.status.isSuccess {
                 let capacity = min(1024 * 1024, Int(httpResponse.fullContentLength ?? 1024))
-                var errorData = Data(capacity: capacity)
+                var errorData = Data()
 
-                for try await byte in bytes {
+                for try await chunk in stream {
                     if errorData.count < capacity {
-                        errorData.append(byte)
+                        errorData.append(chunk)
                     } else {
                         break
                     }
                 }
+                errorData = errorData.prefix(capacity)
                 return .failure(.errorResponse(HTTPFetchResponse(response: httpResponse, body: errorData)))
             }
 
@@ -269,28 +280,8 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
             let expectedBytes = httpResponse.fullContentLength
             var readBytes: Int64 = httpResponse.contentRangeOffset
 
-            let capacity = 64 * 1024
-            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
-            defer { buffer.deallocate() }
-
-            var count = 0
-            for try await byte in bytes {
-                buffer[count] = byte
-                count += 1
-                if count == capacity {
-                    let chunk = Data(bytes: buffer, count: count)
-                    readBytes += Int64(count)
-                    let progress = expectedBytes.map { $0 > 0 ? Double(min(readBytes, $0)) / Double($0) : 1.0 }
-                    if case let .failure(error) = consume(chunk, progress) {
-                        return .failure(error)
-                    }
-                    count = 0
-                }
-            }
-
-            if count > 0 {
-                let chunk = Data(bytes: buffer, count: count)
-                readBytes += Int64(count)
+            for try await chunk in stream {
+                readBytes += Int64(chunk.count)
                 let progress = expectedBytes.map { $0 > 0 ? Double(min(readBytes, $0)) / Double($0) : 1.0 }
                 if case let .failure(error) = consume(chunk, progress) {
                     return .failure(error)
@@ -327,11 +318,14 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
     /// Isolated proxy to pass challenges back to the `DefaultHTTPClientDelegate`.
     /// URLSession guarantees its delegate callbacks are serialized, so the mutable `authTask` is safe.
-    private final class TaskDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private final class TaskDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let request: HTTPRequest
         weak var clientDelegate: DefaultHTTPClientDelegate?
         weak var client: DefaultHTTPClient?
         var authTask: Task<Void, Never>?
+
+        var streamContinuation: AsyncThrowingStream<Data, Error>.Continuation?
+        var responseContinuation: CheckedContinuation<(AsyncThrowingStream<Data, Error>, URLResponse), Error>?
 
         init(
             request: HTTPRequest,
@@ -345,6 +339,39 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
             authTask?.cancel()
+            if let responseContinuation = responseContinuation {
+                self.responseContinuation = nil
+                if let error = error {
+                    responseContinuation.resume(throwing: error)
+                } else {
+                    responseContinuation.resume(throwing: URLError(.badServerResponse))
+                }
+            } else {
+                if let error = error {
+                    streamContinuation?.finish(throwing: error)
+                } else {
+                    streamContinuation?.finish()
+                }
+            }
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+            if let responseContinuation = responseContinuation {
+                self.responseContinuation = nil
+
+                var streamContinuation: AsyncThrowingStream<Data, Error>.Continuation!
+                let stream = AsyncThrowingStream<Data, Error> { cont in
+                    streamContinuation = cont
+                }
+                self.streamContinuation = streamContinuation
+
+                responseContinuation.resume(returning: (stream, response))
+            }
+            completionHandler(.allow)
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            streamContinuation?.yield(data)
         }
 
         func urlSession(
