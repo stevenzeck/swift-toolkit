@@ -318,6 +318,8 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
     /// Isolated proxy to pass challenges back to the `DefaultHTTPClientDelegate`.
     /// URLSession guarantees its delegate callbacks are serialized, so the mutable `authTask` is safe.
+    /// Both `urlSession(_:task:didCompleteWithError:)` and `urlSession(_:task:didReceiveChallenge:completionHandler:)`
+    /// run on the same serial delegate queue.
     private final class TaskDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let request: HTTPRequest
         weak var clientDelegate: DefaultHTTPClientDelegate?

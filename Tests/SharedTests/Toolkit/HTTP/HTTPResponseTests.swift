@@ -56,5 +56,12 @@ struct HTTPResponseTests {
 
         response = HTTPResponse(request: request, url: url, status: .ok, headers: ["Content-Disposition": "inline"], mediaType: nil)
         #expect(response.filename == nil)
+
+        response = HTTPResponse(request: request, url: url, status: .ok, headers: ["Content-Disposition": "attachment; filename*=UTF-8''%e2%82%ac%20rates; filename=fallback.txt"], mediaType: nil)
+        #expect(response.filename == "€ rates")
+
+        // Malformed UTF-8 in filename* should fall back to filename
+        response = HTTPResponse(request: request, url: url, status: .ok, headers: ["Content-Disposition": "attachment; filename*=UTF-8''%FF%FF; filename=fallback.txt"], mediaType: nil)
+        #expect(response.filename == "fallback.txt")
     }
 }

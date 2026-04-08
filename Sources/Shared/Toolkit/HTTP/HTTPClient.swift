@@ -30,20 +30,26 @@ public protocol HTTPClient: Loggable {
     ) async -> HTTPResult<HTTPResponse>
 }
 
+/// Safe because the `consume` closure is called serially by the `stream` implementation.
+private final class _HTTPFetchBox: @unchecked Sendable {
+    var data = Data()
+    init() {}
+}
+
 public extension HTTPClient {
     /// Fetches the resource from the given `request` and returns the response alongside the accumulated data.
     func fetch(_ request: HTTPRequestConvertible) async -> HTTPResult<HTTPFetchResponse> {
-        nonisolated(unsafe) var data = Data()
+        let box = _HTTPFetchBox()
         let responseResult = await stream(
             request: request,
             onReceiveResponse: nil,
             consume: { chunk, _ in
-                data.append(chunk)
+                box.data.append(chunk)
                 return .success(())
             }
         )
 
-        return responseResult.map { HTTPFetchResponse(response: $0, body: data) }
+        return responseResult.map { HTTPFetchResponse(response: $0, body: box.data) }
     }
 
     /// Fetches the resource and attempts to decode it with the given `decoder`.
@@ -300,8 +306,8 @@ public struct HTTPResponse: Equatable {
                 if encodingParts.count == 3 {
                     let encoding = String(encodingParts[0]).lowercased()
                     let encodedFilename = String(encodingParts[2])
-                    if encoding == "utf-8" {
-                        return encodedFilename.removingPercentEncoding
+                    if encoding == "utf-8", let decoded = encodedFilename.removingPercentEncoding {
+                        return decoded
                     }
                 }
             }
