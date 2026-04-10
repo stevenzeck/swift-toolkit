@@ -84,11 +84,24 @@ private let cover2 = UIImage(data: fixtures.data(at: "cover2.jpg"))!
 
         @Test func usesSVGCoverLink() async throws {
             let pub = makePublication(
-                resources: [Link(href: "cover-svg.svg", mediaType: .svg, rels: [.cover])],
-                containerURL: fixtures.url(for: "cover-svg.svg"),
-                containerHref: "cover-svg.svg"
+                resources: [Link(href: "cover.svg", mediaType: .svg, rels: [.cover])],
+                containerURL: fixtures.url(for: "cover.svg"),
+                containerHref: "cover.svg"
             )
             #expect(try await pub.cover().get() != nil)
+        }
+
+        @Test func capsSVGCoverAtDefaultMaxSize() async throws {
+            // SVG canvas is 1400×2100, which exceeds defaultCoverMaxSize.
+            // cover() must cap it to the default maximum.
+            let pub = makePublication(
+                resources: [Link(href: "cover.svg", mediaType: .svg, rels: [.cover])],
+                containerURL: fixtures.url(for: "cover.svg"),
+                containerHref: "cover.svg"
+            )
+            let image = try #require(try await pub.cover().get())
+            #expect(image.size.width == 800)
+            #expect(image.size.height == 1200)
         }
 
         @Test func returnsNilWhenNoCoverImageFound() async throws {
@@ -121,9 +134,9 @@ private let cover2 = UIImage(data: fixtures.data(at: "cover2.jpg"))!
         @Test func scalesDownSVG() async throws {
             let size = CGSize(width: 75, height: 75)
             let pub = makePublication(
-                resources: [Link(href: "cover-svg.svg", mediaType: .svg, rels: [.cover])],
-                containerURL: fixtures.url(for: "cover-svg.svg"),
-                containerHref: "cover-svg.svg"
+                resources: [Link(href: "cover.svg", mediaType: .svg, rels: [.cover])],
+                containerURL: fixtures.url(for: "cover.svg"),
+                containerHref: "cover.svg"
             )
             let image = try #require(try await pub.coverFitting(maxSize: size).get())
             #expect(image.size.width == 50)
@@ -131,15 +144,15 @@ private let cover2 = UIImage(data: fixtures.data(at: "cover2.jpg"))!
         }
 
         @Test func doesNotUpscaleSVG() async throws {
-            // SVG canvas is 100×150; requesting a larger max size must not upscale it.
+            // SVG canvas is 1400×2100; requesting a larger max size must not upscale it.
             let pub = makePublication(
-                resources: [Link(href: "cover-svg.svg", mediaType: .svg, rels: [.cover])],
-                containerURL: fixtures.url(for: "cover-svg.svg"),
-                containerHref: "cover-svg.svg"
+                resources: [Link(href: "cover.svg", mediaType: .svg, rels: [.cover])],
+                containerURL: fixtures.url(for: "cover.svg"),
+                containerHref: "cover.svg"
             )
-            let image = try #require(try await pub.coverFitting(maxSize: CGSize(width: 200, height: 300)).get())
-            #expect(image.size.width == 100)
-            #expect(image.size.height == 150)
+            let image = try #require(try await pub.coverFitting(maxSize: CGSize(width: 3000, height: 3000)).get())
+            #expect(image.size.width == 1400)
+            #expect(image.size.height == 2100)
         }
     }
 }
