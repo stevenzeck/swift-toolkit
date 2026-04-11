@@ -7,7 +7,7 @@
 import Foundation
 
 /// Holds the information about an HTTP request performed by an `HTTPClient`.
-public struct HTTPRequest: Equatable {
+public struct HTTPRequest: Equatable, Sendable {
     /// Address of the remote resource to request.
     public var url: HTTPURL
 
@@ -44,7 +44,7 @@ public struct HTTPRequest: Equatable {
     public var allowUserInteraction: Bool
 
     /// Additional context data specific to a given implementation of `HTTPClient`.
-    public var userInfo: [AnyHashable: AnyHashable]
+    public var userInfo: [String: AnySendableHashable]
 
     public init(
         url: HTTPURL,
@@ -53,7 +53,7 @@ public struct HTTPRequest: Equatable {
         body: Body? = nil,
         timeoutInterval: TimeInterval? = nil,
         allowUserInteraction: Bool = false,
-        userInfo: [AnyHashable: AnyHashable] = [:]
+        userInfo: [String: AnySendableHashable] = [:]
     ) {
         self.url = url
         self.method = method
