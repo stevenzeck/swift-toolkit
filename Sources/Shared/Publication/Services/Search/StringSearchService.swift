@@ -19,7 +19,7 @@ public class StringSearchService: SearchService {
     public static func makeFactory(
         snippetLength: Int = 200,
         searchAlgorithm: StringSearchAlgorithm = BasicStringSearchAlgorithm(),
-        extractorFactory: _ResourceContentExtractorFactory = _DefaultResourceContentExtractorFactory()
+        extractorFactory: ResourceContentExtractorFactory = DefaultResourceContentExtractorFactory()
     ) -> (PublicationServiceContext) -> StringSearchService? {
         { context in
             StringSearchService(
@@ -38,9 +38,9 @@ public class StringSearchService: SearchService {
     private let language: Language?
     private let snippetLength: Int
     private let searchAlgorithm: StringSearchAlgorithm
-    private let extractorFactory: _ResourceContentExtractorFactory
+    private let extractorFactory: ResourceContentExtractorFactory
 
-    public init(publication: Weak<Publication>, language: Language?, snippetLength: Int, searchAlgorithm: StringSearchAlgorithm, extractorFactory: _ResourceContentExtractorFactory) {
+    public init(publication: Weak<Publication>, language: Language?, snippetLength: Int, searchAlgorithm: StringSearchAlgorithm, extractorFactory: ResourceContentExtractorFactory) {
         self.publication = publication
         self.language = language
         self.snippetLength = snippetLength
@@ -75,7 +75,7 @@ public class StringSearchService: SearchService {
         private let language: Language?
         private let snippetLength: Int
         private let searchAlgorithm: StringSearchAlgorithm
-        private let extractorFactory: _ResourceContentExtractorFactory
+        private let extractorFactory: ResourceContentExtractorFactory
         private let query: String
         private let options: SearchOptions
 
@@ -84,7 +84,7 @@ public class StringSearchService: SearchService {
             language: Language?,
             snippetLength: Int,
             searchAlgorithm: StringSearchAlgorithm,
-            extractorFactory: _ResourceContentExtractorFactory,
+            extractorFactory: ResourceContentExtractorFactory,
             query: String,
             options: SearchOptions?
         ) {
