@@ -21,6 +21,7 @@ final class MockHTTPURLProtocol: Foundation.URLProtocol {
         get { _requestHandler.value }
         set { _requestHandler = UncheckedSendable(newValue) }
     }
+
     private static var _requestHandler = UncheckedSendable<((URLRequest) -> MockResponse)?>(nil)
 
     /// Describes a mock response to return for an intercepted request.
@@ -72,9 +73,15 @@ final class MockHTTPURLProtocol: Foundation.URLProtocol {
 
     private actor StoppedState {
         var isStopped = false
-        func setStopped() { isStopped = true }
-        func getStopped() -> Bool { isStopped }
+        func setStopped() {
+            isStopped = true
+        }
+
+        func getStopped() -> Bool {
+            isStopped
+        }
     }
+
     private let stoppedState = StoppedState()
 
     override func startLoading() {
@@ -89,11 +96,11 @@ final class MockHTTPURLProtocol: Foundation.URLProtocol {
     override func stopLoading() {
         Task { await stop() }
     }
-    
+
     private func stop() async {
         await stoppedState.setStopped()
     }
-    
+
     private func isStopped() async -> Bool {
         await stoppedState.getStopped()
     }
@@ -113,7 +120,7 @@ final class MockHTTPURLProtocol: Foundation.URLProtocol {
             // the wait without blocking the thread for the full duration.
             let pollInterval: TimeInterval = 0.05
             var elapsed: TimeInterval = 0
-            
+
             Task {
                 while elapsed < seconds, await !isStopped() {
                     try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
