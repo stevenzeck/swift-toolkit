@@ -5,18 +5,23 @@
 //
 
 import Foundation
+import ReadiumShared
 
 /// A `URLProtocol` subclass that intercepts HTTP requests for testing
 /// `DefaultHTTPClient` without hitting the network.
 ///
 /// Configure the static `requestHandler` before each test to control
 /// the response returned for intercepted requests.
-final class MockHTTPURLProtocol: URLProtocol {
+final class MockHTTPURLProtocol: Foundation.URLProtocol {
     /// Handler called for each intercepted request. Returns the response
     /// configuration to simulate.
     ///
     /// Must be set before starting a request.
-    nonisolated(unsafe) static var requestHandler: ((URLRequest) -> MockResponse)?
+    static var requestHandler: ((URLRequest) -> MockResponse)? {
+        get { _requestHandler.value }
+        set { _requestHandler = UncheckedSendable(newValue) }
+    }
+    private static var _requestHandler = UncheckedSendable<((URLRequest) -> MockResponse)?>(nil)
 
     /// Describes a mock response to return for an intercepted request.
     indirect enum MockResponse {
@@ -65,10 +70,12 @@ final class MockHTTPURLProtocol: URLProtocol {
         request
     }
 
-    /// Set to `true` by `stopLoading()` so that an in-progress `.delayed`
-    /// delivery can abort early rather than blocking until the full interval
-    /// elapses.
-    private nonisolated(unsafe) var isStopped = false
+    private actor StoppedState {
+        var isStopped = false
+        func setStopped() { isStopped = true }
+        func getStopped() -> Bool { isStopped }
+    }
+    private let stoppedState = StoppedState()
 
     override func startLoading() {
         guard let handler = Self.requestHandler else {
@@ -80,7 +87,15 @@ final class MockHTTPURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {
-        isStopped = true
+        Task { await stop() }
+    }
+    
+    private func stop() async {
+        await stoppedState.setStopped()
+    }
+    
+    private func isStopped() async -> Bool {
+        await stoppedState.getStopped()
     }
 
     // MARK: - Private
@@ -98,12 +113,15 @@ final class MockHTTPURLProtocol: URLProtocol {
             // the wait without blocking the thread for the full duration.
             let pollInterval: TimeInterval = 0.05
             var elapsed: TimeInterval = 0
-            while elapsed < seconds, !isStopped {
-                Thread.sleep(forTimeInterval: pollInterval)
-                elapsed += pollInterval
-            }
-            if !isStopped {
-                deliver(then)
+            
+            Task {
+                while elapsed < seconds, await !isStopped() {
+                    try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+                    elapsed += pollInterval
+                }
+                if await !isStopped() {
+                    deliver(then)
+                }
             }
 
         case let .authenticationChallenge(host, method, then):

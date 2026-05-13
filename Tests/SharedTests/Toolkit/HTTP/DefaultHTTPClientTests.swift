@@ -217,19 +217,19 @@ struct DefaultHTTPClientTests {
                 .success(chunks: [chunk1, chunk2])
             }
 
-            nonisolated(unsafe) var receivedChunks: [Data] = []
+            let receivedChunks = Box<[Data]>([])
 
             let result = await makeClient().stream(
                 request: makeURL()
             ) { data, _ in
-                receivedChunks.append(data)
+                receivedChunks.value.append(data)
                 return .success(())
             }
 
             let response = try result.get()
             #expect(response.status == .ok)
             // URLSession may coalesce chunks, so verify total data
-            let totalData = receivedChunks.reduce(Data(), +)
+            let totalData = receivedChunks.value.reduce(Data(), +)
             #expect(totalData == chunk1 + chunk2)
         }
 

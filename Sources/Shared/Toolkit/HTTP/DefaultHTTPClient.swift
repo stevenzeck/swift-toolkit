@@ -5,7 +5,9 @@
 //
 
 import Foundation
-import UIKit
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 public enum URLAuthenticationChallengeResponse: Sendable {
     /// Use the specified credential.
@@ -258,6 +260,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                     if errorData.count < capacity {
                         errorData.append(chunk)
                     } else {
+                        task.cancel()
                         break
                     }
                 }
@@ -267,12 +270,14 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
 
             if request.hasHeader("Range"), !httpResponse.acceptsByteRanges {
                 log(.error, "Streaming ranges requires the remote HTTP server to support byte range requests: \(url)")
+                task.cancel()
                 return .failure(.rangeNotSupported)
             }
 
             if let onReceive = onReceiveResponse {
                 let result = await onReceive(httpResponse)
                 if case let .failure(error) = result {
+                    task.cancel()
                     return .failure(error)
                 }
             }
@@ -284,6 +289,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 readBytes += Int64(chunk.count)
                 let progress = expectedBytes.map { $0 > 0 ? Double(min(readBytes, $0)) / Double($0) : 1.0 }
                 if case let .failure(error) = consume(chunk, progress) {
+                    task.cancel()
                     return .failure(error)
                 }
             }
@@ -346,6 +352,7 @@ public final class DefaultHTTPClient: HTTPClient, Loggable {
                 if let error = error {
                     responseContinuation.resume(throwing: error)
                 } else {
+                    // If there's no error but no response was received, the server closed the connection prematurely.
                     responseContinuation.resume(throwing: URLError(.badServerResponse))
                 }
             } else {

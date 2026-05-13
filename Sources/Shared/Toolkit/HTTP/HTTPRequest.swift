@@ -78,7 +78,7 @@ public struct HTTPRequest: Equatable {
         }
     }
 
-    /// Issue a byte range request. Use -1 to download until the end.
+    /// Issue a byte range request. Use `start..<start` to download until the end.
     public mutating func setRange(_ range: Range<UInt64>) {
         let start = max(0, range.lowerBound)
         let end = range.upperBound - 1

@@ -20,7 +20,8 @@ public protocol HTTPClient: Loggable {
     ///   - onReceiveResponse: Optional callback allowing you to intercept the response headers and cancel early.
     ///   - consume: Callback called for each chunk of data received. Callers
     ///     are responsible to accumulate the data if needed. Return an error
-    ///     to abort the request.
+    ///     to abort the request. Important: `consume` is always called serially. Implementations must never
+    ///     invoke it concurrently. Callers may rely on this for unsynchronized accumulation.
     ///     The `progress` parameter represents the overall resource progress (including
     ///     any `contentRangeOffset` for range requests), not just the progress of the current chunk.
     func stream(
@@ -30,7 +31,9 @@ public protocol HTTPClient: Loggable {
     ) async -> HTTPResult<HTTPResponse>
 }
 
-/// Safe because the `consume` closure is called serially by the `stream` implementation.
+/// Safe because the `consume` closure is guaranteed by the `HTTPClient` protocol to be called serially
+/// by the `stream` implementation. Any change to the protocol contract that would allow concurrent
+/// calls to `consume` would require this box to be synchronized.
 private final class _HTTPFetchBox: @unchecked Sendable {
     var data = Data()
     init() {}
@@ -125,7 +128,6 @@ public extension HTTPClient {
             onReceiveResponse: nil,
             consume: { data, progression in
                 do {
-                    try fileHandle.seekToEnd()
                     try fileHandle.write(contentsOf: data)
                 } catch {
                     return .failure(.fileSystem(.io(error)))
@@ -267,6 +269,7 @@ public struct HTTPResponse: Equatable {
     /// The full expected content length for this resource, when known.
     ///
     /// This will be the total length of the resource, even for byte range requests.
+    /// Handles headers like `bytes 0-100/1000` and `bytes */1000`.
     public var fullContentLength: Int64? {
         if let contentRange = valueForHeader("Content-Range"),
            let totalLengthString = contentRange.split(separator: "/").last?.trimmingCharacters(in: .whitespaces),
@@ -278,6 +281,7 @@ public struct HTTPResponse: Equatable {
     }
 
     /// Offset of the current response in the full resource.
+    /// Handles headers like `bytes 0-100/1000`. Returns 0 if the range is unknown (e.g., `bytes */1000`).
     public var contentRangeOffset: Int64 {
         guard let contentRange = valueForHeader("Content-Range"),
               let rangeString = contentRange.split(separator: " ", maxSplits: 1).last,
@@ -291,7 +295,7 @@ public struct HTTPResponse: Equatable {
 
     /// The resource filename as provided by the server in the `Content-Disposition` header.
     public var filename: String? {
-        guard let disposition = headers["Content-Disposition"] else {
+        guard let disposition = valueForHeader("Content-Disposition") else {
             return nil
         }
 
@@ -331,7 +335,7 @@ public struct HTTPResponse: Equatable {
 /// Holds the information about a successful download.
 public struct HTTPDownload: Sendable {
     /// The location of a temporary file where the server's response is stored.
-    /// You are responsible for moving or deleting the downloaded file..
+    /// You are responsible for moving or deleting the downloaded file.
     public let location: FileURL
 
     /// A suggested filename for the response data, taken from the `Content-Disposition` header.
