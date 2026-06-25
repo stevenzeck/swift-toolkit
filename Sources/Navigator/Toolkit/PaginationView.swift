@@ -34,6 +34,7 @@ protocol PageView {
     func go(to location: PageLocation, animated: Bool) async
 }
 
+@MainActor
 protocol PaginationViewDelegate: AnyObject {
     /// Creates the page view for the page at given index.
     func paginationView(_ paginationView: PaginationView, pageViewAtIndex index: Int) -> (UIView & PageView)?
@@ -229,7 +230,8 @@ final class PaginationView: UIView, Loggable {
     }
 
     private func loadPages() {
-        loadPagesTask.replace { @MainActor in
+        loadPagesTask?.cancel()
+        loadPagesTask = Task { @MainActor in
             await loadNextPage()
             delegate?.paginationViewDidUpdateViews(self)
         }

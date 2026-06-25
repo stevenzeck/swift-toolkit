@@ -254,7 +254,9 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
 
     private lazy var mediaLoader = PublicationMediaLoader(publication: publication)
 
-    private lazy var player: AVPlayer = {
+    private lazy var player: AVPlayer = makePlayer()
+
+    private func makePlayer() -> AVPlayer {
         let player = AVPlayer()
         player.allowsExternalPlayback = false
         player.automaticallyWaitsToMinimizeStalling = false
@@ -328,7 +330,7 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
         }
 
         return player
-    }()
+    }
 
     private func shouldPlayNextResource(completion: @escaping @MainActor @Sendable (Bool) -> Void) {
         guard let delegate = delegate else {
@@ -355,32 +357,19 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     }
 
     private func makePlaybackInfo(forTime time: Double? = nil, completion: @escaping @MainActor @Sendable (MediaPlaybackInfo) -> Void) {
-        let resourceIndex = resourceIndex
-        let state = state
-        let currentTime = time ?? currentTime
-        let linkDuration = publication.readingOrder[resourceIndex].duration
-        let currentItem = player.currentItem
-
-        // A deadlock can occur when loading HTTP assets and creating the
-        // playback info from the main thread. To fix this, this is an
-        // asynchronous operation.
-        Task.detached {
-            var duration: Double? = linkDuration
-            if let itemDuration = currentItem?.duration, itemDuration.isNumeric {
-                duration = itemDuration.secondsOrZero
-            }
-
-            let info = MediaPlaybackInfo(
-                resourceIndex: resourceIndex,
-                state: state,
-                time: currentTime,
-                duration: duration
-            )
-
-            Task { @MainActor in
-                completion(info)
-            }
+        var duration = publication.readingOrder[resourceIndex].duration
+        if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
+            duration = itemDuration.secondsOrZero
         }
+
+        let info = MediaPlaybackInfo(
+            resourceIndex: resourceIndex,
+            state: state,
+            time: time ?? currentTime,
+            duration: duration
+        )
+
+        completion(info)
     }
 
     private func makeLocator(forTime time: Double) -> Locator {
@@ -413,11 +402,14 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     private var lastLoadedTimeRanges: [Range<Double>] = []
 
     private lazy var loadedTimeRangesTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+        let isSelfNil = MainActor.assumeIsolated { self == nil }
+        if isSelfNil {
+            timer.invalidate()
+            return
+        }
+
         MainActor.assumeIsolated {
-            guard let self = self else {
-                timer.invalidate()
-                return
-            }
+            guard let self = self else { return }
 
             let ranges: [Range<Double>] = (self.player.currentItem?.loadedTimeRanges ?? [])
                 .map { value in

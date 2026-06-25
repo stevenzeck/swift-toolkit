@@ -109,8 +109,8 @@ import Foundation
 
     private let onNavigation: () -> Void
 
-    private var observerTokens: Set<InputObservableToken> = []
-    private weak var boundNavigator: (any VisualNavigator)?
+    private nonisolated(unsafe) var observerTokens: Set<InputObservableToken> = []
+    private nonisolated(unsafe) weak var boundNavigator: (any VisualNavigator)?
 
     /// Initializes a new `DirectionalNavigationAdapter`.
     ///

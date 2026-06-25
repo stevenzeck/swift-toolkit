@@ -143,7 +143,7 @@ public struct HTMLDecorationTemplate: JSONObjectEncodable {
         )
     }
 
-    private static var classNamesId = 0
+    private nonisolated(unsafe) static var classNamesId = 0
     private static func makeUniqueClassName(key: String) -> String {
         classNamesId += 1
         return "readium-\(key)-\(classNamesId)"

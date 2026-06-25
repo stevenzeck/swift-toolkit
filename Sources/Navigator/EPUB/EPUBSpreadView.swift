@@ -7,6 +7,7 @@
 import ReadiumShared
 @preconcurrency import WebKit
 
+@MainActor
 protocol EPUBSpreadViewDelegate: AnyObject {
     /// Returns the content inset the spread view should use.
     func spreadViewContentInset(_ spreadView: EPUBSpreadView) -> UIEdgeInsets
@@ -56,7 +57,7 @@ class EPUBSpreadView: UIView, Loggable, PageView {
     private var activityIndicatorStopWorkItem: DispatchWorkItem?
 
     private(set) var isSpreadLoaded = false
-    private var spreadLoadTask: Task<Void, Never>?
+    private nonisolated(unsafe) var spreadLoadTask: Task<Void, Never>?
 
     required init(
         viewModel: EPUBNavigatorViewModel,
@@ -103,7 +104,6 @@ class EPUBSpreadView: UIView, Loggable, PageView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        clear()
     }
 
     /// Called when the spread view is removed from the view hierarchy, to
@@ -173,15 +173,25 @@ class EPUBSpreadView: UIView, Loggable, PageView {
         await spreadLoaded()
 
         log(.trace, "Evaluate script: \(script)")
-        return await withCheckedContinuation { continuation in
+
+        let result: Result<UncheckedSendable<Any>, Error> = await withCheckedContinuation { continuation in
             webView.evaluateJavaScript(script) { [weak self] res, error in
-                if let error = error {
-                    self?.log(.error, error)
-                    continuation.resume(returning: .failure(error))
-                } else {
-                    continuation.resume(returning: .success(res ?? ()))
+                MainActor.assumeIsolated {
+                    if let error = error {
+                        self?.log(.error, error)
+                        continuation.resume(returning: .failure(error))
+                    } else {
+                        continuation.resume(returning: .success(UncheckedSendable(res ?? ())))
+                    }
                 }
             }
+        }
+
+        switch result {
+        case let .success(sendableVal):
+            return .success(sendableVal.value)
+        case let .failure(error):
+            return .failure(error)
         }
     }
 
@@ -645,7 +655,7 @@ extension EPUBSpreadView: WKNavigationDelegate {
         setNeedsStopActivityIndicator()
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         var policy: WKNavigationActionPolicy = .allow
 
         if navigationAction.navigationType == .linkActivated {

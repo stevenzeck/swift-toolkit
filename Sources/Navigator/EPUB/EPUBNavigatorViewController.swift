@@ -91,6 +91,7 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         /// Logs the state changes when true.
         public var debugState: Bool
 
+        @MainActor
         public init(
             preferences: EPUBPreferences = .empty,
             defaults: EPUBDefaults = EPUBDefaults(),
@@ -285,17 +286,23 @@ open class EPUBNavigatorViewController: InputObservableViewController,
             config: config
         )
 
+        // Positions and total progression only make sense in the context
+        // of the publication's actual reading order. Therefore when
+        // provided with a different reading order, we should assume the
+        // positions list is empty, and also not compute the
+        // totalProgression when calculating the current locator.
+        let positionsByReadingOrderClosure: () async -> ReadResult<[[Locator]]>
+        if readingOrder != nil {
+            positionsByReadingOrderClosure = { .success([]) }
+        } else {
+            positionsByReadingOrderClosure = { await publication.positionsByReadingOrder() }
+        }
+
         self.init(
             viewModel: viewModel,
             initialLocation: initialLocation,
             readingOrder: viewModel.readingOrder,
-            positionsByReadingOrder:
-            // Positions and total progression only make sense in the context
-            // of the publication's actual reading order. Therefore when
-            // provided with a different reading order, we should assume the
-            // positions list is empty, and also not compute the
-            // totalProgression when calculating the current locator.
-            (readingOrder != nil) ? { .success([]) } : publication.positionsByReadingOrder
+            positionsByReadingOrder: positionsByReadingOrderClosure
         )
     }
 
@@ -804,45 +811,43 @@ open class EPUBNavigatorViewController: InputObservableViewController,
                 return
             }
 
-            await withTaskGroup(of: Void.self) { tasks in
-                guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
 
-                let source = self.decorations[group] ?? []
-                let target = decorations.map {
-                    var d = $0
-                    d.locator = self.publication.normalizeLocator(d.locator)
-                    return DiffableDecoration(decoration: d)
+            let source = self.decorations[group] ?? []
+            let target = decorations.map {
+                var d = $0
+                d.locator = self.publication.normalizeLocator(d.locator)
+                return DiffableDecoration(decoration: d)
+            }
+            self.decorations[group] = target
+
+            if decorations.isEmpty {
+                for (_, pageView) in paginationView.loadedViews {
+                    guard !Task.isCancelled else { return }
+                    _ = await (pageView as? EPUBSpreadView)?.evaluateScript(
+                        // The updates command are using `requestAnimationFrame()`, so we need it for
+                        // `clear()` as well otherwise we might recreate a highlight after it has been
+                        // cleared.
+                        "requestAnimationFrame(function () { readium.getDecorations('\(group)').clear(); });"
+                    )
                 }
-                self.decorations[group] = target
-
-                if decorations.isEmpty {
-                    for (_, pageView) in paginationView.loadedViews {
-                        tasks.addTask {
-                            guard !Task.isCancelled else { return }
-                            await (pageView as? EPUBSpreadView)?.evaluateScript(
-                                // The updates command are using `requestAnimationFrame()`, so we need it for
-                                // `clear()` as well otherwise we might recreate a highlight after it has been
-                                // cleared.
-                                "requestAnimationFrame(function () { readium.getDecorations('\(group)').clear(); });"
-                            )
-                        }
+            } else {
+                // Would like to use a `TaskGroup` to evaluate scripts
+                // concurrently across all spreads, but doing so triggers a bug
+                // in the Swift 6 region-based isolation checker: Pattern that
+                // the region-based isolation checker does not understand how to check.
+                for (href, changes) in target.changesByHREF(from: source) {
+                    guard let script = changes.javascript(forGroup: group, styles: self.config.decorationTemplates) else {
+                        continue
                     }
-                } else {
-                    for (href, changes) in target.changesByHREF(from: source) {
-                        guard let script = changes.javascript(forGroup: group, styles: self.config.decorationTemplates) else {
-                            continue
-                        }
-                        tasks.addTask { @MainActor [weak self] in
-                            guard
-                                !Task.isCancelled,
-                                let spreadView = self?.loadedSpreadViewForHREF(href),
-                                spreadView.isSpreadLoaded
-                            else {
-                                return
-                            }
-                            await spreadView.evaluateScript(script, inHREF: href)
-                        }
+                    guard
+                        !Task.isCancelled,
+                        let spreadView = self.loadedSpreadViewForHREF(href),
+                        spreadView.isSpreadLoaded
+                    else {
+                        continue
                     }
+                    _ = await spreadView.evaluateScript(script, inHREF: href)
                 }
             }
         }
@@ -861,12 +866,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
                 return
             }
 
-            await withTaskGroup(of: Void.self) { tasks in
-                for (_, view) in paginationView.loadedViews {
-                    tasks.addTask {
-                        await (view as? EPUBSpreadView)?.evaluateScript("readium.getDecorations('\(group)').setActivable();")
-                    }
-                }
+            for (_, view) in paginationView.loadedViews {
+                _ = await (view as? EPUBSpreadView)?.evaluateScript("readium.getDecorations('\(group)').setActivable();")
             }
         }
     }
@@ -955,12 +956,8 @@ extension EPUBNavigatorViewController: EPUBNavigatorViewModelDelegate {
                 await (paginationView.currentView as? EPUBSpreadView)?.evaluateScript(script)
 
             case .loadedResources:
-                await withTaskGroup(of: Void.self) { tasks in
-                    for (_, view) in paginationView.loadedViews {
-                        tasks.addTask {
-                            await (view as? EPUBSpreadView)?.evaluateScript(script)
-                        }
-                    }
+                for (_, view) in paginationView.loadedViews {
+                    _ = await (view as? EPUBSpreadView)?.evaluateScript(script)
                 }
 
             case let .resource(href):

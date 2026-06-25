@@ -15,7 +15,8 @@ public protocol AVTTSEngineDelegate: AnyObject, Sendable {
 }
 
 /// Implementation of a `TTSEngine` using Apple AVFoundation's `AVSpeechSynthesizer`.
-public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate, Loggable {
+@MainActor
+public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSynthesizerDelegate, Loggable {
     /// Range of valid values for an AVUtterance rate.
     ///
     /// > The speech rate is a decimal representation within the range of `AVSpeechUtteranceMinimumSpeechRate` and
@@ -86,11 +87,14 @@ public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate
                 on(.play(task))
             }
         } onCancel: {
-            task.cancel()
-            on(.stop(task))
+            Swift.Task { @MainActor in
+                task.cancel()
+                on(.stop(task))
+            }
         }
     }
 
+    @MainActor
     private class Task: Equatable, CustomStringConvertible {
         let utterance: TTSUtterance
         private let onSpeakRange: (Range<String.Index>) -> Void
@@ -102,11 +106,11 @@ public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate
             self.onSpeakRange = onSpeakRange
         }
 
-        var description: String {
+        nonisolated var description: String {
             utterance.text
         }
 
-        static func == (lhs: Task, rhs: Task) -> Bool {
+        nonisolated static func == (lhs: Task, rhs: Task) -> Bool {
             ObjectIdentifier(lhs) == ObjectIdentifier(rhs)
         }
 

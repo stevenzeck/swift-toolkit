@@ -221,7 +221,7 @@ private func escapeAttribute(_ value: String) -> String {
     value.replacingOccurrences(of: "\"", with: "&quot;")
 }
 
-private let regexCache: Cache<NSString, NSRegularExpression> = Cache()
+nonisolated(unsafe) let regexCache: Cache<NSString, NSRegularExpression> = Cache()
 
 private func regex(for pattern: String) -> NSRegularExpression {
     let key = pattern as NSString
