@@ -840,8 +840,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
                     guard let script = changes.javascript(forGroup: group, styles: self.config.decorationTemplates) else {
                         continue
                     }
+                    guard !Task.isCancelled else { return }
                     guard
-                        !Task.isCancelled,
                         let spreadView = self.loadedSpreadViewForHREF(href),
                         spreadView.isSpreadLoaded
                     else {
@@ -866,6 +866,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
                 return
             }
 
+            // TODO: Use a `TaskGroup` to evaluate scripts concurrently across all spreads
+            // once the Swift 6 region-based isolation checker bug is fixed.
             for (_, view) in paginationView.loadedViews {
                 _ = await (view as? EPUBSpreadView)?.evaluateScript("readium.getDecorations('\(group)').setActivable();")
             }

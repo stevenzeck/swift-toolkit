@@ -357,19 +357,27 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     }
 
     private func makePlaybackInfo(forTime time: Double? = nil, completion: @escaping @MainActor @Sendable (MediaPlaybackInfo) -> Void) {
+        let resourceIndex = resourceIndex
+        let state = state
+        let time = time ?? currentTime
         var duration = publication.readingOrder[resourceIndex].duration
-        if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
-            duration = itemDuration.secondsOrZero
+        let currentItem = player.currentItem
+
+        Task {
+            // A deadlock can occur when loading HTTP assets and creating the playback info from the main thread.
+            // To fix this, we load the duration asynchronously.
+            if let currentItem = currentItem, let seconds = try? await currentItem.asset.load(.duration).seconds, !seconds.isNaN {
+                duration = seconds
+            }
+
+            let info = MediaPlaybackInfo(
+                resourceIndex: resourceIndex,
+                state: state,
+                time: time,
+                duration: duration
+            )
+            completion(info)
         }
-
-        let info = MediaPlaybackInfo(
-            resourceIndex: resourceIndex,
-            state: state,
-            time: time ?? currentTime,
-            duration: duration
-        )
-
-        completion(info)
     }
 
     private func makeLocator(forTime time: Double) -> Locator {

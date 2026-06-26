@@ -57,7 +57,7 @@ class EPUBSpreadView: UIView, Loggable, PageView {
     private var activityIndicatorStopWorkItem: DispatchWorkItem?
 
     private(set) var isSpreadLoaded = false
-    private nonisolated(unsafe) var spreadLoadTask: Task<Void, Never>?
+    private var spreadLoadTask: Task<Void, Never>?
 
     required init(
         viewModel: EPUBNavigatorViewModel,
