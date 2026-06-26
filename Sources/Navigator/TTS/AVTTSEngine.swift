@@ -16,7 +16,7 @@ public protocol AVTTSEngineDelegate: AnyObject, Sendable {
 
 /// Implementation of a `TTSEngine` using Apple AVFoundation's `AVSpeechSynthesizer`.
 @MainActor
-public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSynthesizerDelegate, Loggable {
+public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate, Loggable {
     /// Range of valid values for an AVUtterance rate.
     ///
     /// > The speech rate is a decimal representation within the range of `AVSpeechUtteranceMinimumSpeechRate` and
@@ -76,7 +76,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
         _ utterance: TTSUtterance,
         onSpeakRange: @escaping (Range<String.Index>) -> Void
     ) async -> Result<Void, TTSError> {
-        let task = Task(
+        let task = SpeechTask(
             utterance: utterance,
             onSpeakRange: onSpeakRange
         )
@@ -87,7 +87,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
                 on(.play(task))
             }
         } onCancel: {
-            Swift.Task { @MainActor in
+            Task { @MainActor in
                 task.cancel()
                 on(.stop(task))
             }
@@ -95,7 +95,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
     }
 
     @MainActor
-    private class Task: Equatable, CustomStringConvertible {
+    private class SpeechTask: Equatable, CustomStringConvertible {
         let utterance: TTSUtterance
         private let onSpeakRange: (Range<String.Index>) -> Void
         var continuation: CheckedContinuation<Result<Void, TTSError>, Never>!
@@ -110,7 +110,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
             utterance.text
         }
 
-        nonisolated static func == (lhs: Task, rhs: Task) -> Bool {
+        nonisolated static func == (lhs: SpeechTask, rhs: SpeechTask) -> Bool {
             ObjectIdentifier(lhs) == ObjectIdentifier(rhs)
         }
 
@@ -130,7 +130,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
         }
     }
 
-    private func taskUtterance(with task: Task) -> TaskUtterance {
+    private func taskUtterance(with task: SpeechTask) -> TaskUtterance {
         let utter = TaskUtterance(task: task)
 //        utter.rate = rateMultiplierToAVRate(task.utterance.rateMultiplier)
 //        utter.pitchMultiplier = Float(task.utterance.pitchMultiplier)
@@ -141,9 +141,9 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
     }
 
     private class TaskUtterance: AVSpeechUtterance {
-        let task: Task
+        let task: SpeechTask
 
-        init(task: Task) {
+        init(task: SpeechTask) {
             self.task = task
             super.init(string: task.utterance.text)
         }
@@ -226,25 +226,25 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
         /// The TTS engine is waiting for the next utterance to play.
         case stopped
         /// A new utterance is being processed by the TTS engine, we wait for didStart.
-        case starting(Task)
+        case starting(SpeechTask)
         /// The utterance is currently playing and the engine is ready to process other commands.
-        case playing(Task)
+        case playing(SpeechTask)
         /// The engine was stopped while processing the previous utterance, we wait for didStart
         /// and/or didFinish. The queued utterance will be played once the engine is successfully stopped.
-        case stopping(Task, queued: Task?)
+        case stopping(SpeechTask, queued: SpeechTask?)
     }
 
     /// State machine events triggered by the `AVSpeechSynthesizer` or the client
     /// of `AVTTSEngine`.
     private enum Event: Equatable {
         // AVTTSEngine commands
-        case play(Task)
-        case stop(Task)
+        case play(SpeechTask)
+        case stop(SpeechTask)
 
         // AVSpeechSynthesizer delegate events
-        case didStart(Task)
-        case willSpeakRange(Range<String.Index>, task: Task)
-        case didFinish(Task)
+        case didStart(SpeechTask)
+        case willSpeakRange(Range<String.Index>, task: SpeechTask)
+        case didFinish(SpeechTask)
     }
 
     private var state: State = .stopped {
@@ -325,7 +325,7 @@ public final class AVTTSEngine: NSObject, TTSEngine, @preconcurrency AVSpeechSyn
         }
     }
 
-    private func startEngine(with task: Task) {
+    private func startEngine(with task: SpeechTask) {
         synthesizer.speak(taskUtterance(with: task))
     }
 
