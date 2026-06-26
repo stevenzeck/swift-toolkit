@@ -16,7 +16,7 @@ public protocol AVTTSEngineDelegate: AnyObject, Sendable {
 
 /// Implementation of a `TTSEngine` using Apple AVFoundation's `AVSpeechSynthesizer`.
 @MainActor
-public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate, Loggable {
+public final class AVTTSEngine: NSObject, TTSEngine, Loggable {
     /// Range of valid values for an AVUtterance rate.
     ///
     /// > The speech rate is a decimal representation within the range of `AVSpeechUtteranceMinimumSpeechRate` and
@@ -152,41 +152,6 @@ public final class AVTTSEngine: NSObject, TTSEngine, AVSpeechSynthesizerDelegate
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
         }
-    }
-
-    // MARK: AVSpeechSynthesizerDelegate
-
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        guard let task = (utterance as? TaskUtterance)?.task else {
-            return
-        }
-        on(.didStart(task))
-    }
-
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        guard let task = (utterance as? TaskUtterance)?.task else {
-            return
-        }
-        on(.didFinish(task))
-    }
-
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        guard let task = (utterance as? TaskUtterance)?.task else {
-            return
-        }
-        on(.didFinish(task))
-    }
-
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance avUtterance: AVSpeechUtterance) {
-        guard
-            let task = (avUtterance as? TaskUtterance)?.task,
-            characterRange.upperBound <= task.utterance.text.count,
-            let range = Range(characterRange, in: task.utterance.text)
-        else {
-            return
-        }
-
-        on(.willSpeakRange(range, task: task))
     }
 
     // MARK: State machine
@@ -400,5 +365,40 @@ private extension TTSVoice.Quality {
 private extension AVSpeechSynthesisVoice {
     convenience init?(language: Language) {
         self.init(language: language.code.bcp47)
+    }
+}
+
+extension AVTTSEngine: @preconcurrency AVSpeechSynthesizerDelegate {
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        guard let task = (utterance as? TaskUtterance)?.task else {
+            return
+        }
+        on(.didStart(task))
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        guard let task = (utterance as? TaskUtterance)?.task else {
+            return
+        }
+        on(.didFinish(task))
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        guard let task = (utterance as? TaskUtterance)?.task else {
+            return
+        }
+        on(.didFinish(task))
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance avUtterance: AVSpeechUtterance) {
+        guard
+            let task = (avUtterance as? TaskUtterance)?.task,
+            characterRange.upperBound <= task.utterance.text.count,
+            let range = Range(characterRange, in: task.utterance.text)
+        else {
+            return
+        }
+
+        on(.willSpeakRange(range, task: task))
     }
 }
