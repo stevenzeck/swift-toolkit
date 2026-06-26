@@ -161,7 +161,7 @@ final class PaginationView: UIView, Loggable {
         super.didMoveToWindow()
 
         if window == nil {
-            loadPagesTask.cancel()
+            loadPagesTask?.cancel()
         } else {
             loadPages()
         }
