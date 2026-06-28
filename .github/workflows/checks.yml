@@ -146,10 +146,10 @@ jobs:
           xcrun simctl list
       - name: Generate project
         run: make dev lcp=${{ secrets.LCP_URL_SPM }}
-      - name: Build
+      - name: Build & Test
         run: |
           set -eo pipefail
-          xcodebuild build -scheme TestApp -destination "platform=$platform,name=$device" | if command -v xcpretty &> /dev/null; then xcpretty; else cat; fi
+          xcodebuild test -scheme AllTests -destination "platform=$platform,name=$device" | if command -v xcpretty &> /dev/null; then xcpretty; else cat; fi
 
   int-spm:
     name: Integration (Swift Package Manager)
