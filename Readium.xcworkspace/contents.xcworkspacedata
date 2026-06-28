@@ -12,6 +12,9 @@
       </FileRef>
    </Group>
    <FileRef
+      location = "group:Package.swift">
+   </FileRef>
+   <FileRef
       location = "group:TestApp/TestApp.xcodeproj">
    </FileRef>
    <FileRef
