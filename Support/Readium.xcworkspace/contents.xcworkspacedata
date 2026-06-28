@@ -5,19 +5,19 @@
       location = "container:"
       name = "swift-toolkit">
       <FileRef
-         location = "group:Sources">
+         location = "group:../Sources">
       </FileRef>
       <FileRef
-         location = "group:Tests">
+         location = "group:../Tests">
       </FileRef>
    </Group>
    <FileRef
-      location = "group:Package.swift">
+      location = "group:../Package.swift">
    </FileRef>
    <FileRef
-      location = "group:TestApp/TestApp.xcodeproj">
+      location = "group:../TestApp/TestApp.xcodeproj">
    </FileRef>
    <FileRef
-      location = "group:Playground/Playground.xcodeproj">
+      location = "group:../Playground/Playground.xcodeproj">
    </FileRef>
 </Workspace>
