@@ -71,4 +71,19 @@ targets:
       OTHER_SWIFT_FLAGS: -DLCP
       DEVELOPMENT_TEAM: ${RD_DEVELOPMENT_TEAM}
 
+  ReadiumLCPTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: ../Tests/LCPTests
+    dependencies:
+      - target: TestApp
+      - package: Readium
+        product: TestPublications
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      OTHER_SWIFT_FLAGS: -DLCP
+      DEVELOPMENT_TEAM: ${RD_DEVELOPMENT_TEAM}
+
 
