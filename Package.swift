@@ -8,8 +8,9 @@
 import Foundation
 import PackageDescription
 
-let packageRoot = URL(fileURLWithPath: #file).deletingLastPathComponent().path
+let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let hasLCP = FileManager.default.fileExists(atPath: "\(packageRoot)/TestApp/R2LCPClient/Package.swift")
+             || FileManager.default.fileExists(atPath: "TestApp/R2LCPClient/Package.swift")
 
 var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/krzyzanowskim/CryptoSwift.git", from: "1.10.0"),

@@ -66,6 +66,7 @@ else
 	@cp Integrations/Local/project.yml project.yml
 	@cp Integrations/Local/AllTests.xctestplan AllTests.xctestplan
 endif
+	@touch ../Package.swift
 	xcodegen generate
 
 

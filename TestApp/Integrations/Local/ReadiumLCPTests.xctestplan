@@ -19,7 +19,7 @@
   "testTargets" : [
     {
       "target" : {
-        "containerPath" : "container:TestApp.xcodeproj",
+        "containerPath" : "container:..",
         "identifier" : "ReadiumLCPTests",
         "name" : "ReadiumLCPTests"
       }

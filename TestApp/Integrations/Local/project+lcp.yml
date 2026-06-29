@@ -71,28 +71,4 @@ targets:
       OTHER_SWIFT_FLAGS: -DLCP
       DEVELOPMENT_TEAM: ${RD_DEVELOPMENT_TEAM}
 
-  ReadiumLCPTests:
-    type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "18.0"
-    sources:
-      - path: ../Tests/LCPTests
-      - path: ../Tests/Publications/TestPublications.swift
-      - path: ../Tests/Publications/Publications
-        type: folder
-        buildPhase: resources
-    dependencies:
-      - target: TestApp
-      - package: R2LCPClient
-        product: R2LCPClient
-      - package: Readium
-        product: ReadiumLCP
-      - package: Readium
-        product: ReadiumShared
-      - package: Readium
-        product: ReadiumStreamer
-    settings:
-      OTHER_SWIFT_FLAGS: -DLCP
-      DEVELOPMENT_TEAM: ${RD_DEVELOPMENT_TEAM}
-
 
