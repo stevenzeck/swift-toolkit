@@ -109,8 +109,8 @@ import Foundation
 
     private let onNavigation: () -> Void
 
-    private nonisolated(unsafe) var observerTokens: Set<InputObservableToken> = []
-    private nonisolated(unsafe) weak var boundNavigator: (any VisualNavigator)?
+    private var observerTokens: Set<InputObservableToken> = []
+    private weak var boundNavigator: (any VisualNavigator)?
 
     /// Initializes a new `DirectionalNavigationAdapter`.
     ///
@@ -132,16 +132,13 @@ import Foundation
         self.onNavigation = onNavigation
     }
 
-    deinit {
+    isolated deinit {
         guard let nav = boundNavigator else {
             return
         }
 
-        let tokens = observerTokens
-        Task { @MainActor [weak nav] in
-            for token in tokens {
-                nav?.removeObserver(token)
-            }
+        for token in observerTokens {
+            nav.removeObserver(token)
         }
     }
 
