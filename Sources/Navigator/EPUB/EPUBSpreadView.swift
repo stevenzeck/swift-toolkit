@@ -174,23 +174,11 @@ class EPUBSpreadView: UIView, Loggable, PageView {
 
         log(.trace, "Evaluate script: \(script)")
 
-        let result: Result<UncheckedSendable<Any>, Error> = await withCheckedContinuation { continuation in
-            webView.evaluateJavaScript(script) { [weak self] res, error in
-                MainActor.assumeIsolated {
-                    if let error = error {
-                        self?.log(.error, error)
-                        continuation.resume(returning: .failure(error))
-                    } else {
-                        continuation.resume(returning: .success(UncheckedSendable(res ?? ())))
-                    }
-                }
-            }
-        }
-
-        switch result {
-        case let .success(sendableVal):
-            return .success(sendableVal.value)
-        case let .failure(error):
+        do {
+            let res = try await webView.evaluateJavaScript(script)
+            return .success(res ?? ())
+        } catch {
+            log(.error, error)
             return .failure(error)
         }
     }
