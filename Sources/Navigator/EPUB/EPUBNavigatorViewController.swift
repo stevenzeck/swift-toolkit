@@ -822,32 +822,23 @@ open class EPUBNavigatorViewController: InputObservableViewController,
             self.decorations[group] = target
 
             if decorations.isEmpty {
-                for (_, pageView) in paginationView.loadedViews {
-                    guard !Task.isCancelled else { return }
-                    _ = await (pageView as? EPUBSpreadView)?.evaluateScript(
-                        // The updates command are using `requestAnimationFrame()`, so we need it for
-                        // `clear()` as well otherwise we might recreate a highlight after it has been
-                        // cleared.
-                        "requestAnimationFrame(function () { readium.getDecorations('\(group)').clear(); });"
-                    )
+                await withTaskGroup(of: Void.self) { tasks in
+                    for index in paginationView.loadedViews.keys {
+                        tasks.addTask { [weak self] in
+                            await self?.clearDecorations(group: group, atSpreadIndex: index)
+                        }
+                    }
                 }
             } else {
-                // Would like to use a `TaskGroup` to evaluate scripts
-                // concurrently across all spreads, but doing so triggers a bug
-                // in the Swift 6 region-based isolation checker: Pattern that
-                // the region-based isolation checker does not understand how to check.
-                for (href, changes) in target.changesByHREF(from: source) {
-                    guard let script = changes.javascript(forGroup: group, styles: self.config.decorationTemplates) else {
-                        continue
+                await withTaskGroup(of: Void.self) { tasks in
+                    for (href, changes) in target.changesByHREF(from: source) {
+                        guard let script = changes.javascript(forGroup: group, styles: config.decorationTemplates) else {
+                            continue
+                        }
+                        tasks.addTask { [weak self] in
+                            await self?.evaluateDecorationScript(script, forHREF: href)
+                        }
                     }
-                    guard !Task.isCancelled else { return }
-                    guard
-                        let spreadView = self.loadedSpreadViewForHREF(href),
-                        spreadView.isSpreadLoaded
-                    else {
-                        continue
-                    }
-                    _ = await spreadView.evaluateScript(script, inHREF: href)
                 }
             }
         }
@@ -859,19 +850,51 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         callbacks.append(onActivated)
         decorationCallbacks[group] = callbacks
 
-        Task {
-            await initialized()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.initialized()
 
-            guard let paginationView = paginationView else {
+            guard let paginationView = self.paginationView else {
                 return
             }
 
-            // TODO: Use a `TaskGroup` to evaluate scripts concurrently across all spreads
-            // once the Swift 6 region-based isolation checker bug is fixed.
-            for (_, view) in paginationView.loadedViews {
-                _ = await (view as? EPUBSpreadView)?.evaluateScript("readium.getDecorations('\(group)').setActivable();")
+            await withTaskGroup(of: Void.self) { tasks in
+                for index in paginationView.loadedViews.keys {
+                    tasks.addTask { [weak self] in
+                        await self?.setDecorationsActivable(group: group, atSpreadIndex: index)
+                    }
+                }
             }
         }
+    }
+
+    @MainActor
+    private func clearDecorations(group: DecorationGroup, atSpreadIndex index: Int) async {
+        guard
+            !Task.isCancelled,
+            let spreadView = paginationView?.loadedViews[index] as? EPUBSpreadView
+        else { return }
+        // requestAnimationFrame() is needed for clear() too, otherwise we might
+        // recreate a highlight after it has been cleared.
+        _ = await spreadView.evaluateScript(
+            "requestAnimationFrame(function () { readium.getDecorations('\(group)').clear(); });"
+        )
+    }
+
+    @MainActor
+    private func evaluateDecorationScript(_ script: String, forHREF href: AnyURL) async {
+        guard
+            !Task.isCancelled,
+            let spreadView = loadedSpreadViewForHREF(href),
+            spreadView.isSpreadLoaded
+        else { return }
+        _ = await spreadView.evaluateScript(script, inHREF: href)
+    }
+
+    @MainActor
+    private func setDecorationsActivable(group: DecorationGroup, atSpreadIndex index: Int) async {
+        guard let spreadView = paginationView?.loadedViews[index] as? EPUBSpreadView else { return }
+        _ = await spreadView.evaluateScript("readium.getDecorations('\(group)').setActivable();")
     }
 
     // MARK: - Configurable

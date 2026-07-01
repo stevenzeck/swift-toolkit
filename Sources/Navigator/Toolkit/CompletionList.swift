@@ -38,10 +38,12 @@ final class CompletionList {
 
     /// Calls all the registered completion blocks.
     func complete() {
-        let currentBlocks = blocks
-        blocks.removeAll()
-        for block in currentBlocks {
-            block()
+        Task { @MainActor in
+            let currentBlocks = self.blocks
+            self.blocks.removeAll()
+            for block in currentBlocks {
+                block()
+            }
         }
     }
 }

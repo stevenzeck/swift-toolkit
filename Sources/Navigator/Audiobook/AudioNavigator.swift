@@ -411,15 +411,12 @@ public final class AudioNavigator: Navigator, Configurable, AudioSessionUser, Lo
     private var lastLoadedTimeRanges: [Range<Double>] = []
 
     private lazy var loadedTimeRangesTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
-        let isSelfNil = MainActor.assumeIsolated { self == nil }
-        if isSelfNil {
+        guard let self = self else {
             timer.invalidate()
             return
         }
 
         MainActor.assumeIsolated {
-            guard let self = self else { return }
-
             let ranges: [Range<Double>] = (self.player.currentItem?.loadedTimeRanges ?? [])
                 .map { value in
                     let range = value.timeRangeValue
